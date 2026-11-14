@@ -1,0 +1,10 @@
+{
+    "Port": 8090,
+    "RequestTimeoutSeconds": 10,
+    "AutoStartServer": true,
+    "AllowBatchModeServer": true,
+    "EnableInfoLogs": false,
+    "NpmExecutablePath": "\"C:\\Users\\Pichau\\Downloads\\Materias 2026\\Projetos de Engenharia\\Trabalho Final (Atual)\\Unity PdE Project\\IgrejaUnity\\Library\\PackageCache\\com.gamelovers.mcp-unity@d572dc88f1\\Server~\\build\\index.js\"",
+    "AllowRemoteConnections": false,
+    "AllowPackageInstallation": false
+}
