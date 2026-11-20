@@ -296,7 +296,13 @@ namespace EcclesiaFighters.EditorTools
             {
                 qBtns[i] = AddButton(qGridGo, "Quality_" + qn[i], qn[i].ToUpper(), 20, ButtonVariant.Compact);
                 var j = qBtns[i].GetComponent<UIButtonJuice>();
-                if (j) j.driveLabelColor = false; // SettingsManager.HighlightQuality manages text contrast
+                if (j)
+                {
+                    j.driveLabelColor = true;
+                    j.selectedBg      = new Color(0.88f, 0.70f, 0.24f, 1f);
+                    j.selectedFrame   = BrightGold;
+                    j.selectedText    = new Color(0.05f, 0.03f, 0.02f, 1f);
+                }
                 UnityEventTools.AddIntPersistentListener(qBtns[i].onClick, settings.SetQuality, i);
             }
 
@@ -312,16 +318,20 @@ namespace EcclesiaFighters.EditorTools
             resHlg.childForceExpandWidth = false;
             resHlg.childForceExpandHeight = true;
 
-            Button resPrev = AddButton(resRow, "Btn_ResPrev", "◀", 26, ButtonVariant.Compact);
+            Button resPrev = AddButton(resRow, "Btn_ResPrev", "<", 28, ButtonVariant.Compact);
             SetLayoutElement(resPrev.gameObject, preferredWidth: 64f);
+            var prevJuice = resPrev.GetComponent<UIButtonJuice>();
+            if (prevJuice) { prevJuice.hoverScale = 1.0f; prevJuice.pressedScale = 0.98f; }
 
             Image resBox = AddFramedPanel(resRow, "ResolutionBox", SlotDark, MutedGold, false);
             SetLayoutElement(resBox.gameObject, flexibleWidth: 1f);
             Text resText = AddText(resBox.rectTransform, "ResolutionValue", "1920 x 1080", 26, Ivory, TextAnchor.MiddleCenter, FontStyle.Bold);
             Stretch(resText.rectTransform);
 
-            Button resNext = AddButton(resRow, "Btn_ResNext", "▶", 26, ButtonVariant.Compact);
+            Button resNext = AddButton(resRow, "Btn_ResNext", ">", 28, ButtonVariant.Compact);
             SetLayoutElement(resNext.gameObject, preferredWidth: 64f);
+            var nextJuice = resNext.GetComponent<UIButtonJuice>();
+            if (nextJuice) { nextJuice.hoverScale = 1.0f; nextJuice.pressedScale = 0.98f; }
 
             UnityEventTools.AddPersistentListener(resPrev.onClick, settings.PrevResolution);
             UnityEventTools.AddPersistentListener(resNext.onClick, settings.NextResolution);
@@ -624,9 +634,9 @@ namespace EcclesiaFighters.EditorTools
             // Stage cards
             mgr.bgExterior = LoadSprite("Backgrounds/BG_MapExterior.jpg");
             mgr.bgInterior = LoadSprite("Backgrounds/BG_MapInterior.jpg");
-            Button ext = BuildMapCard(root, "CardExterior", "FACHADA DA IGREJA", "Pátio da Catedral  ·  Crepúsculo",
+            Button ext = BuildMapCard(root, "CardExterior", "NAVE CENTRAL",  "Corredor dos Bancos",
                 mgr.bgExterior, 0.06f, 0.48f, out mgr.cardExterior);
-            Button inn = BuildMapCard(root, "CardInterior", "INTERIOR SAGRADO",  "Nave Central  ·  Altar de Ouro",
+            Button inn = BuildMapCard(root, "CardInterior", "ALTAR SAGRADO", "Área do Púlpito",
                 mgr.bgInterior, 0.52f, 0.94f, out mgr.cardInterior);
             UnityEventTools.AddPersistentListener(ext.onClick, mgr.SelectExterior);
             UnityEventTools.AddPersistentListener(inn.onClick, mgr.SelectInterior);
@@ -699,10 +709,11 @@ namespace EcclesiaFighters.EditorTools
             Region(sub.rectTransform, 0.04f, 0.05f, 0.96f, 0.40f);
 
             var juice = cardImage.gameObject.AddComponent<UIButtonJuice>();
-            juice.targetBackground = null; // keep stage artwork tinting owned by MapSelectManager.HighlightCard
-            juice.targetFrame      = frame;
-            juice.targetLabel      = t;
-            juice.driveLabelColor  = false;
+            juice.driveBackgroundColor = false; // keep stage artwork brightness owned by MapSelectManager.HighlightCard
+            juice.targetBackground     = null;
+            juice.targetFrame          = frame;
+            juice.targetLabel          = t;
+            juice.driveLabelColor      = false;
             juice.normalFrame      = MutedGold;
             juice.hoverFrame       = AntiqueGold;
             juice.selectedFrame    = BrightGold;
@@ -871,7 +882,7 @@ namespace EcclesiaFighters.EditorTools
         static void BuildControlsLegend(RectTransform hudRt)
         {
             RectTransform legendRt = NewRect("ControlsLegend", hudRt);
-            Place(legendRt, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(28f, 22f), new Vector2(450f, 134f));
+            Place(legendRt, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(28f, 22f), new Vector2(560f, 118f));
 
             var vlg = legendRt.gameObject.AddComponent<VerticalLayoutGroup>();
             vlg.spacing = 4f;
@@ -890,25 +901,28 @@ namespace EcclesiaFighters.EditorTools
             Text headerTxt = headerBtn.GetComponentInChildren<Text>();
 
             // Body panel with Portuguese moveset legend
-            Image body = AddFramedPanel(legendRt, "LegendContent", new Color(0.04f, 0.03f, 0.06f, 0.84f), MutedGold, false);
-            SetLayoutElement(body.gameObject, preferredHeight: 86f);
+            Image body = AddFramedPanel(legendRt, "LegendContent", new Color(0.04f, 0.03f, 0.06f, 0.86f), MutedGold, false);
+            SetLayoutElement(body.gameObject, preferredHeight: 76f);
             var bodyVlg = body.gameObject.AddComponent<VerticalLayoutGroup>();
-            bodyVlg.padding = new RectOffset(14, 14, 8, 8);
-            bodyVlg.spacing = 4f;
+            bodyVlg.padding = new RectOffset(16, 16, 10, 10);
+            bodyVlg.spacing = 8f;
+            bodyVlg.childAlignment = TextAnchor.MiddleLeft;
             bodyVlg.childControlWidth = true;
             bodyVlg.childControlHeight = true;
             bodyVlg.childForceExpandWidth = true;
-            bodyVlg.childForceExpandHeight = true;
+            bodyVlg.childForceExpandHeight = false;
 
             Text line1 = AddText(body.rectTransform, "MoveControls",
-                "A/D  Mover    ·    W / Espaço  Pular    ·    S  Agachar    ·    Shift  Defender",
-                16, Ivory, TextAnchor.MiddleLeft, FontStyle.Bold);
-            line1.resizeTextForBestFit = true; line1.resizeTextMinSize = 11; line1.resizeTextMaxSize = 16;
+                "A/D Mover · W/Espaço Pular · S Agachar · Shift Defender",
+                15, Ivory, TextAnchor.MiddleLeft, FontStyle.Bold);
+            line1.horizontalOverflow = HorizontalWrapMode.Overflow;
+            SetLayoutElement(line1.gameObject, preferredHeight: 24f);
 
             Text line2 = AddText(body.rectTransform, "AttackControls",
-                "J  Soco Leve    ·    K  Soco Forte    ·    L  Chute    ·    U / I  Especial",
-                16, BrightGold, TextAnchor.MiddleLeft, FontStyle.Bold);
-            line2.resizeTextForBestFit = true; line2.resizeTextMinSize = 11; line2.resizeTextMaxSize = 16;
+                "J Soco Leve · K Soco Forte · L Chute · U/I Especial",
+                15, BrightGold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            line2.horizontalOverflow = HorizontalWrapMode.Overflow;
+            SetLayoutElement(line2.gameObject, preferredHeight: 24f);
 
             var toggleComp = legendRt.gameObject.AddComponent<ControlsLegendToggle>();
             toggleComp.contentPanel   = body.gameObject;
@@ -1199,6 +1213,8 @@ namespace EcclesiaFighters.EditorTools
             Image border = AddImage(panel.rectTransform, "Frame", frameColor, sprFrameOrnate, false);
             border.type = Image.Type.Sliced;
             Stretch(border.rectTransform);
+            var le = border.gameObject.AddComponent<LayoutElement>();
+            le.ignoreLayout = true; // border must hug panel perimeter and never consume LayoutGroup slots
             return panel;
         }
 
@@ -1284,6 +1300,19 @@ namespace EcclesiaFighters.EditorTools
                     selectedTxt   = BrightGold;
                     break;
 
+                case ButtonVariant.Compact:
+                    normalBg      = ObsidianPanel;
+                    hoverBg       = new Color(0.15f, 0.11f, 0.20f, 0.98f);
+                    pressedBg     = new Color(0.13f, 0.10f, 0.18f, 0.98f);
+                    selectedBg    = new Color(0.88f, 0.70f, 0.24f, 1.00f);
+                    normalFrame   = MutedGold;
+                    hoverFrame    = BrightGold;
+                    selectedFrame = BrightGold;
+                    normalTxt     = Ivory;
+                    hoverTxt      = BrightGold;
+                    selectedTxt   = new Color(0.05f, 0.03f, 0.02f, 1f);
+                    break;
+
                 default:
                     normalBg      = ObsidianPanel;
                     hoverBg       = new Color(0.16f, 0.11f, 0.21f, 0.98f);
@@ -1334,8 +1363,9 @@ namespace EcclesiaFighters.EditorTools
             juice.normalText       = normalTxt;
             juice.hoverText        = hoverTxt;
             juice.selectedText     = selectedTxt;
-            juice.hoverScale       = variant == ButtonVariant.Compact ? 1.025f : 1.035f;
-            juice.selectedScale    = variant == ButtonVariant.Compact ? 1.025f : 1.035f;
+            juice.hoverScale       = variant == ButtonVariant.Compact ? 1.02f  : 1.035f;
+            juice.selectedScale    = variant == ButtonVariant.Compact ? 1.02f  : 1.035f;
+            juice.pressedScale     = variant == ButtonVariant.Compact ? 0.985f : 0.97f;
             return btn;
         }
 

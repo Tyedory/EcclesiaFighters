@@ -43,13 +43,27 @@ namespace EcclesiaFighters
         void OnEnable()
         {
             // Populate VS bar from PlayerPrefs
-            // (names are stored as strings via CharacterSelectManager)
             int idxA = PlayerPrefs.GetInt("SelectedCharA", 0);
             int idxB = PlayerPrefs.GetInt("SelectedCharB", 1);
             string[] names = { "Santo Agostinho", "Karl Marx" };
-            if (nameA) nameA.text = names[Mathf.Clamp(idxA, 0, names.Length-1)].ToUpper();
-            if (nameB) nameB.text = names[Mathf.Clamp(idxB, 0, names.Length-1)].ToUpper();
-            goBtn.interactable = false;
+            if (nameA) nameA.text = names[Mathf.Clamp(idxA, 0, names.Length - 1)].ToUpper();
+            if (nameB) nameB.text = names[Mathf.Clamp(idxB, 0, names.Length - 1)].ToUpper();
+
+            if (cardExterior)
+            {
+                if (bgExterior) cardExterior.sprite = bgExterior;
+                cardExterior.color = Color.white;
+                cardExterior.GetComponent<UIButtonJuice>()?.SetSelected(false);
+            }
+            if (cardInterior)
+            {
+                if (bgInterior) cardInterior.sprite = bgInterior;
+                cardInterior.color = Color.white;
+                cardInterior.GetComponent<UIButtonJuice>()?.SetSelected(false);
+            }
+
+            mapChosen = false;
+            if (goBtn) goBtn.interactable = false;
         }
 
         public void SelectExterior()
@@ -70,7 +84,7 @@ namespace EcclesiaFighters
 
         void HighlightCard(Image on, Image off)
         {
-            // Tint selected card bright, dim the other, and sync ornate frame glow
+            // Full brightness on selected stage; lightly dim the unselected card
             if (on)
             {
                 on.color = Color.white;
@@ -80,7 +94,7 @@ namespace EcclesiaFighters
             }
             if (off)
             {
-                off.color = new Color(0.48f, 0.45f, 0.50f);
+                off.color = new Color(0.76f, 0.76f, 0.80f, 1f);
                 off.GetComponent<UIButtonJuice>()?.SetSelected(false);
                 var o = off.GetComponent<Outline>();
                 if (o) { o.effectColor = normalBorder; o.effectDistance = new Vector2(2f, -2f); }
@@ -99,7 +113,7 @@ namespace EcclesiaFighters
         {
             // Show fight overlay
             fightOverlay.alpha = 0; fightOverlay.gameObject.SetActive(true);
-            if (fightMapText)   fightMapText.text   = selectedMap == MapID.Exterior ? "Fachada da Igreja" : "Interior Sagrado";
+            if (fightMapText)   fightMapText.text   = selectedMap == MapID.Exterior ? "Nave Central" : "Altar Sagrado";
             if (fightNamesText) fightNamesText.text = nameA.text + " · " + nameB.text;
             // Fade in overlay
             float t = 0;

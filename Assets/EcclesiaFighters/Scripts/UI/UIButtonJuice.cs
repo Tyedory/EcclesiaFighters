@@ -10,10 +10,10 @@ namespace EcclesiaFighters
     /// </summary>
     public class UIButtonJuice : MonoBehaviour,
         IPointerEnterHandler, IPointerExitHandler,
-        IPointerDownHandler, IPointerUpHandler,
-        ISelectHandler, IDeselectHandler
+        IPointerDownHandler, IPointerUpHandler
     {
         [Header("Targets")]
+        public bool    driveBackgroundColor = true;
         public Graphic targetBackground;
         public Graphic targetFrame;
         public Text    targetLabel;
@@ -43,23 +43,35 @@ namespace EcclesiaFighters
         public float transitionSpeed = 16f;
 
         Selectable selectable;
+        Outline    labelOutline;
+        Shadow     labelShadow;
         Vector3    baseScale = Vector3.one;
-        bool       hovered, pressed, focused, isSelected;
+        bool       hovered, pressed, isSelected;
 
         void Awake()
         {
             selectable = GetComponent<Selectable>();
             baseScale  = transform.localScale;
-            if (!targetBackground) targetBackground = GetComponent<Graphic>();
-            if (!targetLabel)      targetLabel      = GetComponentInChildren<Text>();
+            if (driveBackgroundColor && !targetBackground) targetBackground = GetComponent<Graphic>();
+            if (!targetLabel) targetLabel = GetComponentInChildren<Text>();
+            CacheLabelEffects();
             ApplyImmediate();
+        }
+
+        void CacheLabelEffects()
+        {
+            if (!targetLabel) return;
+            foreach (Shadow s in targetLabel.GetComponents<Shadow>())
+            {
+                if (s is Outline o) labelOutline = o;
+                else                labelShadow  = s;
+            }
         }
 
         void OnEnable()
         {
             hovered = false;
             pressed = false;
-            focused = false;
             ApplyImmediate();
         }
 
@@ -67,7 +79,6 @@ namespace EcclesiaFighters
         {
             hovered = false;
             pressed = false;
-            focused = false;
             transform.localScale = baseScale;
         }
 
@@ -81,8 +92,6 @@ namespace EcclesiaFighters
         public void OnPointerExit(PointerEventData e)  { hovered = false; pressed = false; }
         public void OnPointerDown(PointerEventData e)  { if (IsInteractable()) pressed = true; }
         public void OnPointerUp(PointerEventData e)    { pressed = false; }
-        public void OnSelect(BaseEventData e)        { focused = true; }
-        public void OnDeselect(BaseEventData e)      { focused = false; }
 
         bool IsInteractable() => selectable == null || selectable.IsInteractable();
 
@@ -92,18 +101,37 @@ namespace EcclesiaFighters
             EvaluateTargets(out float scaleMul, out Color bg, out Color frame, out Color txt);
 
             transform.localScale = Vector3.Lerp(transform.localScale, baseScale * scaleMul, t);
-            if (targetBackground) targetBackground.color = Color.Lerp(targetBackground.color, bg, t);
-            if (targetFrame)      targetFrame.color      = Color.Lerp(targetFrame.color, frame, t);
-            if (driveLabelColor && targetLabel) targetLabel.color = Color.Lerp(targetLabel.color, txt, t);
+            if (driveBackgroundColor && targetBackground)
+                targetBackground.color = Color.Lerp(targetBackground.color, bg, t);
+            if (targetFrame)
+                targetFrame.color = Color.Lerp(targetFrame.color, frame, t);
+            if (driveLabelColor && targetLabel)
+            {
+                targetLabel.color = Color.Lerp(targetLabel.color, txt, t);
+                SyncLabelEffects(txt);
+            }
         }
 
         public void ApplyImmediate()
         {
             EvaluateTargets(out float scaleMul, out Color bg, out Color frame, out Color txt);
             transform.localScale = baseScale * scaleMul;
-            if (targetBackground) targetBackground.color = bg;
-            if (targetFrame)      targetFrame.color      = frame;
-            if (driveLabelColor && targetLabel) targetLabel.color = txt;
+            if (driveBackgroundColor && targetBackground)
+                targetBackground.color = bg;
+            if (targetFrame)
+                targetFrame.color = frame;
+            if (driveLabelColor && targetLabel)
+            {
+                targetLabel.color = txt;
+                SyncLabelEffects(txt);
+            }
+        }
+
+        void SyncLabelEffects(Color targetTxt)
+        {
+            bool darkText = (targetTxt.r + targetTxt.g + targetTxt.b) < 0.75f;
+            if (labelOutline) labelOutline.enabled = !darkText;
+            if (labelShadow)  labelShadow.enabled  = !darkText;
         }
 
         void EvaluateTargets(out float scaleMul, out Color bg, out Color frame, out Color txt)
@@ -120,14 +148,14 @@ namespace EcclesiaFighters
             if (pressed)
             {
                 scaleMul = pressedScale;
-                bg       = pressedBg;
+                bg       = isSelected ? Color.Lerp(selectedBg, pressedBg, 0.25f) : pressedBg;
                 frame    = selectedFrame;
                 txt      = selectedText;
             }
-            else if (hovered || focused)
+            else if (hovered)
             {
                 scaleMul = hoverScale;
-                bg       = isSelected ? Color.Lerp(selectedBg, hoverBg, 0.35f) : hoverBg;
+                bg       = isSelected ? Color.Lerp(selectedBg, Color.white, 0.12f) : hoverBg;
                 frame    = isSelected ? selectedFrame : hoverFrame;
                 txt      = isSelected ? selectedText  : hoverText;
             }

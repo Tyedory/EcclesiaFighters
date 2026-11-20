@@ -141,7 +141,14 @@ namespace EcclesiaFighters
         {
             if (resolutions == null || resolutions.Count == 0) return;
             pRes = (pRes + dir + resolutions.Count) % resolutions.Count;
-            RefreshUI();
+            UpdateResolutionLabel();
+        }
+
+        void UpdateResolutionLabel()
+        {
+            if (!resolutionLabel) return;
+            Vector2Int r = CurrentRes();
+            resolutionLabel.text = r.x + " x " + r.y;
         }
 
         void LoadAppliedIntoPending()
@@ -174,11 +181,7 @@ namespace EcclesiaFighters
             if (voiceSlider)  voiceSlider.value  = pVoice;
             refreshing = false;
 
-            if (resolutionLabel)
-            {
-                Vector2Int r = CurrentRes();
-                resolutionLabel.text = r.x + " x " + r.y;
-            }
+            UpdateResolutionLabel();
             bool multi = resolutions != null && resolutions.Count > 1;
             if (prevResolutionButton) prevResolutionButton.interactable = multi;
             if (nextResolutionButton) nextResolutionButton.interactable = multi;
@@ -194,14 +197,19 @@ namespace EcclesiaFighters
                 Button b = qualityButtons[i];
                 if (!b) continue;
                 bool sel = i == pQuality;
+                var juice = b.GetComponent<UIButtonJuice>();
+                if (juice)
+                {
+                    juice.SetSelected(sel);
+                    juice.ApplyImmediate();
+                    continue;
+                }
                 var img = b.GetComponent<Image>();
-                if (img) img.color = sel ? new Color(0.84f, 0.67f, 0.27f, 1f) : new Color(0.10f, 0.08f, 0.13f, 0.95f);
+                if (img) img.color = sel ? new Color(0.88f, 0.70f, 0.24f, 1f) : new Color(0.06f, 0.05f, 0.09f, 0.94f);
                 var t = b.GetComponentInChildren<Text>();
-                if (t) t.color = sel ? new Color(0.09f, 0.06f, 0.04f, 1f) : new Color(0.96f, 0.93f, 0.86f, 1f);
+                if (t) t.color = sel ? new Color(0.05f, 0.03f, 0.02f, 1f) : new Color(0.96f, 0.93f, 0.86f, 1f);
                 var o = b.GetComponent<Outline>();
                 if (o) o.effectDistance = sel ? new Vector2(3f, -3f) : new Vector2(2f, -2f);
-                var juice = b.GetComponent<UIButtonJuice>();
-                if (juice) juice.SetSelected(sel);
             }
         }
 
