@@ -195,11 +195,13 @@ namespace EcclesiaFighters
                 if (!b) continue;
                 bool sel = i == pQuality;
                 var img = b.GetComponent<Image>();
-                if (img) img.color = sel ? new Color(0.95f, 0.73f, 0.1f) : new Color(0.28f, 0.22f, 0.12f);
+                if (img) img.color = sel ? new Color(0.84f, 0.67f, 0.27f, 1f) : new Color(0.10f, 0.08f, 0.13f, 0.95f);
                 var t = b.GetComponentInChildren<Text>();
-                if (t) t.color = sel ? new Color(0.08f, 0.05f, 0.02f) : new Color(0.94f, 0.91f, 0.85f);
+                if (t) t.color = sel ? new Color(0.09f, 0.06f, 0.04f, 1f) : new Color(0.96f, 0.93f, 0.86f, 1f);
                 var o = b.GetComponent<Outline>();
-                if (o) o.effectDistance = sel ? new Vector2(4f, -4f) : new Vector2(2f, -2f);
+                if (o) o.effectDistance = sel ? new Vector2(3f, -3f) : new Vector2(2f, -2f);
+                var juice = b.GetComponent<UIButtonJuice>();
+                if (juice) juice.SetSelected(sel);
             }
         }
 

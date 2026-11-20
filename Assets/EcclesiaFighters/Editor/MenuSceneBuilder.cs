@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEditor.Events;
 using UnityEditor.SceneManagement;
@@ -10,37 +12,51 @@ using UnityEngine.UI;
 namespace EcclesiaFighters.EditorTools
 {
     /// <summary>
-    /// Generates the missing UI (Canvas, EventSystem, panels, buttons, texts, audio) for the three menu
-    /// scenes and wires every serialized field of <see cref="TitleScreenManager"/>,
-    /// <see cref="CharacterSelectManager"/> and <see cref="MapSelectManager"/> (+ <see cref="SettingsManager"/>).
+    /// Generates and restyles UI (Canvas, EventSystem, procedural Sacred Arcade sprites,
+    /// panels, buttons, layouts, and audio) for TitleScreen, CharSelect, MapSelect, and FightScene HUD.
     ///
-    /// Menu:  EcclesiaFighters ▸ Menus ▸ Build All Menu Scenes   (or each scene individually)
-    /// CLI:   Unity -batchmode -quit -projectPath . -executeMethod EcclesiaFighters.EditorTools.MenuSceneBuilder.BuildAllBatch
-    ///
-    /// The builder is idempotent: the generated roots ("Canvas", "EventSystem", "BGM") are deleted and rebuilt
-    /// on every run; the manager GameObjects and the Camera are kept.
+    /// Menus:
+    ///   EcclesiaFighters ▸ Menus ▸ Build All Menu Scenes
+    ///   EcclesiaFighters ▸ Menus ▸ Rebuild Fight HUD
+    /// CLI:
+    ///   Unity -batchmode -quit -projectPath . -executeMethod EcclesiaFighters.EditorTools.MenuSceneBuilder.BuildAllBatch
+    ///   Unity -batchmode -quit -projectPath . -executeMethod EcclesiaFighters.EditorTools.MenuSceneBuilder.RebuildFightHudBatch
     /// </summary>
     public static class MenuSceneBuilder
     {
-        const string Root      = "Assets/EcclesiaFighters/";
-        const string ScenesDir = Root + "Scenes/";
-        const string SpritesDir= Root + "Sprites/";
-        const string AudioDir  = Root + "Audio/";
+        const string Root       = "Assets/EcclesiaFighters/";
+        const string ScenesDir  = Root + "Scenes/";
+        const string SpritesDir = Root + "Sprites/";
+        const string UISpritesDir = SpritesDir + "UI/";
+        const string AudioDir   = Root + "Audio/";
 
-        // ── Palette (matches the colours hard-coded in the manager scripts) ──
-        static readonly Color Gold      = new Color(0.94f, 0.75f, 0.15f, 1f);
-        static readonly Color Parchment = new Color(0.94f, 0.91f, 0.85f, 1f);
-        static readonly Color PanelDark = new Color(0.05f, 0.04f, 0.07f, 0.88f);
-        static readonly Color ButtonBg  = new Color(0.10f, 0.07f, 0.12f, 0.92f);
-        static readonly Color SliderBg  = new Color(0.16f, 0.13f, 0.08f, 1f);
-        static readonly Color FaithBlue = new Color(0.5f, 0.8f, 1f, 1f);
-        static readonly Color IdeoRed   = new Color(1f, 0.5f, 0.5f, 1f);
+        // ── "Sacred Arcade / Baroque Cathedral" Palette ───────────────────────
+        static readonly Color ObsidianBg    = new Color(0.04f, 0.03f, 0.06f, 0.94f);
+        static readonly Color ObsidianPanel = new Color(0.06f, 0.05f, 0.09f, 0.92f);
+        static readonly Color CardSurface   = new Color(0.08f, 0.06f, 0.11f, 0.94f);
+        static readonly Color SlotDark      = new Color(0.03f, 0.02f, 0.05f, 0.96f);
+        static readonly Color BurgundyPanel = new Color(0.22f, 0.05f, 0.09f, 0.93f);
+        static readonly Color CrimsonDark   = new Color(0.32f, 0.06f, 0.10f, 0.96f);
+        static readonly Color Crimson       = new Color(0.68f, 0.12f, 0.17f, 1.00f);
+        static readonly Color CrimsonBright = new Color(0.88f, 0.20f, 0.24f, 1.00f);
+        static readonly Color AntiqueGold   = new Color(0.84f, 0.67f, 0.27f, 1.00f);
+        static readonly Color BrightGold    = new Color(1.00f, 0.85f, 0.36f, 1.00f);
+        static readonly Color MutedGold     = new Color(0.56f, 0.44f, 0.18f, 0.92f);
+        static readonly Color Ivory         = new Color(0.96f, 0.93f, 0.86f, 1.00f);
+        static readonly Color IvoryMuted    = new Color(0.76f, 0.72f, 0.65f, 0.95f);
+        static readonly Color FaithBlue     = new Color(0.56f, 0.84f, 1.00f, 1.00f);
+        static readonly Color IdeoCrimson   = new Color(0.95f, 0.38f, 0.40f, 1.00f);
+        static readonly Color InkDark       = new Color(0.02f, 0.01f, 0.03f, 0.92f);
 
-        static Font UIFont { get { return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); } }
+        enum ButtonVariant { Default, PrimaryCrimson, SecondaryDanger, Compact }
 
-        // ═════════════════════════════════════════════════════
-        //  Menu entries
-        // ═════════════════════════════════════════════════════
+        static Sprite sprPanel, sprFrameOrnate, sprPill, sprKnob, sprSheen, sprDivider;
+
+        static Font UIFont => Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+        // ═════════════════════════════════════════════════════════════════════
+        //  Menu Entries
+        // ═════════════════════════════════════════════════════════════════════
         [MenuItem("EcclesiaFighters/Menus/Build All Menu Scenes")]
         public static void BuildAll()
         {
@@ -55,14 +71,28 @@ namespace EcclesiaFighters.EditorTools
 
         [MenuItem("EcclesiaFighters/Menus/Build TitleScreen")]
         public static void MenuTitle()      { if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) BuildTitle(); }
+
         [MenuItem("EcclesiaFighters/Menus/Build CharSelect")]
         public static void MenuCharSelect() { if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) BuildCharSelect(); }
+
         [MenuItem("EcclesiaFighters/Menus/Build MapSelect")]
         public static void MenuMapSelect()  { if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) BuildMapSelect(); }
+
+        [MenuItem("EcclesiaFighters/Menus/Rebuild Fight HUD")]
+        public static void MenuFightHud()
+        {
+            if (!EditorUtility.DisplayDialog("Rebuild Fight HUD",
+                    "This restyles the FightScene HUD Canvas while preserving all FightSceneManager gameplay, camera, spawn, and stage references.\nContinue?",
+                    "Rebuild HUD", "Cancel")) return;
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            RebuildFightHudBatch();
+            EditorUtility.DisplayDialog("Rebuild Fight HUD", "FightScene HUD was rebuilt and saved.", "OK");
+        }
 
         /// <summary>No dialogs: usable from -executeMethod.</summary>
         public static void BuildAllBatch()
         {
+            EnsureUISprites();
             BuildTitle();
             BuildCharSelect();
             BuildMapSelect();
@@ -70,11 +100,21 @@ namespace EcclesiaFighters.EditorTools
             Debug.Log("[MenuSceneBuilder] TitleScreen, CharSelect and MapSelect rebuilt.");
         }
 
-        // ═════════════════════════════════════════════════════
+        /// <summary>No dialogs: usable from -executeMethod.</summary>
+        public static void RebuildFightHudBatch()
+        {
+            EnsureUISprites();
+            BuildFightHud();
+            AssetDatabase.SaveAssets();
+            Debug.Log("[MenuSceneBuilder] FightScene HUD rebuilt.");
+        }
+
+        // ═════════════════════════════════════════════════════════════════════
         //  TitleScreen
-        // ═════════════════════════════════════════════════════
+        // ═════════════════════════════════════════════════════════════════════
         static void BuildTitle()
         {
+            EnsureUISprites();
             Scene scene = OpenScene("TitleScreen");
             ClearGenerated(scene);
             SetupCamera();
@@ -90,35 +130,64 @@ namespace EcclesiaFighters.EditorTools
             RectTransform titlePanel = NewRect("TitlePanel", root); Stretch(titlePanel);
             Image bg = AddImage(titlePanel, "Background", Color.white, LoadSprite("Backgrounds/BG_TitleScreen.jpg"), false);
             Stretch(bg.rectTransform);
-            Image shade = AddImage(titlePanel, "Shade", new Color(0f, 0f, 0f, 0.35f), null, false);
-            Stretch(shade.rectTransform);
+            Image vignette = AddImage(titlePanel, "Shade", new Color(0.02f, 0.01f, 0.04f, 0.48f), null, false);
+            Stretch(vignette.rectTransform);
 
+            // Cathedral marquee header
             RectTransform logo = NewRect("TitleLogo", titlePanel);
-            Region(logo, 0.12f, 0.60f, 0.88f, 0.93f);
+            Region(logo, 0.14f, 0.56f, 0.86f, 0.92f);
             var logoGroup = logo.gameObject.AddComponent<CanvasGroup>();
             logoGroup.alpha = 0f; logoGroup.interactable = false; logoGroup.blocksRaycasts = false;
-            Text title = AddText(logo, "Title", "ECCLESIA FIGHTERS", 120, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(title.rectTransform, 0f, 0.42f, 1f, 1f); AddShadow(title);
-            Text sub = AddText(logo, "Subtitle", "FÉ  ×  IDEOLOGIA", 46, Parchment, TextAnchor.MiddleCenter, FontStyle.Italic);
-            Region(sub.rectTransform, 0f, 0.08f, 1f, 0.42f); AddShadow(sub);
 
+            Image crestBg = AddFramedPanel(logo, "CrestPanel", new Color(0.05f, 0.03f, 0.07f, 0.72f), AntiqueGold, false);
+            Stretch(crestBg.rectTransform);
+
+            AddDivider(logo, "TopDivider", BrightGold, 0.14f, 0.88f, 0.86f, 0.92f);
+
+            Text title = AddText(logo, "Title", "ECCLESIA FIGHTERS", 104, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(title.rectTransform, 0.04f, 0.42f, 0.96f, 0.86f);
+            title.resizeTextForBestFit = true; title.resizeTextMinSize = 48; title.resizeTextMaxSize = 110;
+            AddStrongTextEffects(title, 3f, 4f);
+
+            AddDivider(logo, "MidDivider", AntiqueGold, 0.22f, 0.36f, 0.78f, 0.41f);
+
+            Text sub = AddText(logo, "Subtitle", "FÉ  ×  IDEOLOGIA", 40, Ivory, TextAnchor.MiddleCenter, FontStyle.Italic);
+            Region(sub.rectTransform, 0.06f, 0.10f, 0.94f, 0.35f);
+            AddStrongTextEffects(sub, 2f, 3f);
+
+            // Menu group with VerticalLayoutGroup
             RectTransform menu = NewRect("MenuGroup", titlePanel);
-            Region(menu, 0.35f, 0.08f, 0.65f, 0.50f);
+            Region(menu, 0.34f, 0.10f, 0.66f, 0.50f);
             var menuGroup = menu.gameObject.AddComponent<CanvasGroup>();
             menuGroup.alpha = 0f;
 
+            Image menuTray = AddFramedPanel(menu, "MenuTray", new Color(0.04f, 0.03f, 0.06f, 0.78f), MutedGold, false);
+            Stretch(menuTray.rectTransform);
+
+            RectTransform btnList = NewRect("ButtonList", menu); Stretch(btnList);
+            var vlg = btnList.gameObject.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(24, 24, 24, 24);
+            vlg.spacing = 16f;
+            vlg.childAlignment = TextAnchor.MiddleCenter;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = true;
+
             string[] labels = { "INICIAR BATALHA", "CONFIGURAÇÕES", "SAIR" };
+            ButtonVariant[] variants = { ButtonVariant.PrimaryCrimson, ButtonVariant.Default, ButtonVariant.SecondaryDanger };
             var buttons = new Button[labels.Length];
             for (int i = 0; i < labels.Length; i++)
             {
-                buttons[i] = AddButton(menu, "Btn_" + labels[i].Replace(" ", ""), labels[i], 40);
-                float yMax = 1f - i * 0.34f;
-                Region(buttons[i].GetComponent<RectTransform>(), 0f, yMax - 0.27f, 1f, yMax);
+                buttons[i] = AddButton(btnList, "Btn_" + labels[i].Replace(" ", ""), labels[i], 36, variants[i]);
                 AddHoverSelect(buttons[i], mgr, i);
             }
             UnityEventTools.AddPersistentListener(buttons[0].onClick, mgr.GotoCharSelect);
             UnityEventTools.AddPersistentListener(buttons[1].onClick, mgr.GotoSettings);
             UnityEventTools.AddPersistentListener(buttons[2].onClick, mgr.QuitGame);
+
+            Text navHint = AddText(titlePanel, "NavHint", "USE ↑ ↓ E ENTER OU CLIQUE PARA NAVEGAR", 20, IvoryMuted, TextAnchor.MiddleCenter, FontStyle.Italic);
+            Region(navHint.rectTransform, 0.25f, 0.025f, 0.75f, 0.075f);
 
             // ── Settings panel (hidden at start, SettingsManager lives on it) ──
             GameObject settingsPanel = BuildSettingsPanel(root, mgr);
@@ -131,8 +200,8 @@ namespace EcclesiaFighters.EditorTools
 
             // ── Wire TitleScreenManager ──
             mgr.titlePanel      = titlePanel.gameObject;
-            mgr.charSelectPanel = null;           // separate scene → manager falls back to loading "CharSelect"
-            mgr.mapSelectPanel  = null;           // separate scene → manager falls back to loading "MapSelect"
+            mgr.charSelectPanel = null;
+            mgr.mapSelectPanel  = null;
             mgr.settingsPanel   = settingsPanel;
             mgr.fadeOverlay     = fade;
             mgr.lightningFlash  = flash;
@@ -150,6 +219,9 @@ namespace EcclesiaFighters.EditorTools
             Debug.Log("[MenuSceneBuilder] TitleScreen built.");
         }
 
+        // ═════════════════════════════════════════════════════════════════════
+        //  Configurações Panel
+        // ═════════════════════════════════════════════════════════════════════
         static GameObject BuildSettingsPanel(RectTransform root, TitleScreenManager title)
         {
             RectTransform panel = NewRect("SettingsPanel", root); Stretch(panel);
@@ -157,98 +229,225 @@ namespace EcclesiaFighters.EditorTools
 
             Image bg = AddImage(panel, "Background", Color.white, LoadSprite("Backgrounds/BG_TitleScreen_Dark.jpg"), true);
             Stretch(bg.rectTransform);
+            Image shade = AddImage(panel, "BackdropShade", new Color(0.02f, 0.01f, 0.04f, 0.62f), null, false);
+            Stretch(shade.rectTransform);
 
-            Image box = AddImage(panel, "Box", PanelDark);
-            Region(box.rectTransform, 0.22f, 0.07f, 0.78f, 0.93f);
-            AddOutline(box, Gold, 3f);
+            // Main modal box
+            Image box = AddFramedPanel(panel, "Box", ObsidianBg, AntiqueGold, true);
+            Region(box.rectTransform, 0.13f, 0.06f, 0.87f, 0.94f);
 
-            Text head = AddText(box.rectTransform, "Heading", "CONFIGURAÇÕES", 56, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(head.rectTransform, 0.05f, 0.90f, 0.95f, 0.98f); AddShadow(head);
+            // Burgundy header bar
+            Image headerBar = AddFramedPanel(box.rectTransform, "HeaderBar", BurgundyPanel, AntiqueGold, false);
+            Region(headerBar.rectTransform, 0.025f, 0.855f, 0.975f, 0.972f);
 
-            // Graphics — one button per Quality level defined in the project
-            Text gl = AddText(box.rectTransform, "GraphicsLabel", "QUALIDADE GRÁFICA", 28, Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
-            Region(gl.rectTransform, 0.06f, 0.85f, 0.60f, 0.90f);
+            Text head = AddText(headerBar.rectTransform, "Heading", "CONFIGURAÇÕES", 48, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(head.rectTransform, 0.04f, 0.28f, 0.96f, 0.94f);
+            AddStrongTextEffects(head, 2.5f, 3.5f);
+
+            Text subHead = AddText(headerBar.rectTransform, "SubHeading", "VÍDEO, EXIBIÇÃO E ÁUDIO", 20, IvoryMuted, TextAnchor.MiddleCenter, FontStyle.Italic);
+            Region(subHead.rectTransform, 0.04f, 0.06f, 0.96f, 0.30f);
+
+            // Two-column body
+            RectTransform body = NewRect("BodyColumns", box.rectTransform);
+            Region(body, 0.025f, 0.155f, 0.975f, 0.835f);
+            var bodyHlg = body.gameObject.AddComponent<HorizontalLayoutGroup>();
+            bodyHlg.padding = new RectOffset(8, 8, 6, 6);
+            bodyHlg.spacing = 24f;
+            bodyHlg.childControlWidth = true;
+            bodyHlg.childControlHeight = true;
+            bodyHlg.childForceExpandWidth = false;
+            bodyHlg.childForceExpandHeight = true;
+
+            // Left column: Video & Graphics
+            Image leftCol = AddFramedPanel(body, "LeftColumn", CardSurface, MutedGold, false);
+            var leftLe = leftCol.gameObject.AddComponent<LayoutElement>();
+            leftLe.flexibleWidth = 1.08f;
+
+            var leftVlg = leftCol.gameObject.AddComponent<VerticalLayoutGroup>();
+            leftVlg.padding = new RectOffset(22, 22, 18, 18);
+            leftVlg.spacing = 14f;
+            leftVlg.childAlignment = TextAnchor.UpperLeft;
+            leftVlg.childControlWidth = true;
+            leftVlg.childControlHeight = true;
+            leftVlg.childForceExpandWidth = true;
+            leftVlg.childForceExpandHeight = false;
+
+            Text secVideo = AddText(leftCol.rectTransform, "VideoSection", "VÍDEO & GRÁFICOS", 25, AntiqueGold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            SetLayoutElement(secVideo.gameObject, preferredHeight: 34f);
+            AddLayoutDivider(leftCol.rectTransform, "VideoDivider", AntiqueGold);
+
+            Text gl = AddText(leftCol.rectTransform, "GraphicsLabel", "QUALIDADE GRÁFICA", 20, IvoryMuted, TextAnchor.MiddleLeft, FontStyle.Bold);
+            SetLayoutElement(gl.gameObject, preferredHeight: 28f);
+
             string[] qn = QualitySettings.names;
+            int cols = Mathf.Clamp(qn.Length, 1, 3);
+            int rows = Mathf.CeilToInt(qn.Length / (float)cols);
+            RectTransform qGridGo = NewRect("QualityGrid", leftCol.rectTransform);
+            var grid = qGridGo.gameObject.AddComponent<GridLayoutGroup>();
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = cols;
+            grid.cellSize = new Vector2(182f, 46f);
+            grid.spacing = new Vector2(10f, 10f);
+            grid.childAlignment = TextAnchor.MiddleCenter;
+            SetLayoutElement(qGridGo.gameObject, preferredHeight: rows * 46f + Mathf.Max(0, rows - 1) * 10f);
+
             var qBtns = new Button[qn.Length];
-            float qw = 0.88f / Mathf.Max(1, qn.Length);
             for (int i = 0; i < qn.Length; i++)
             {
-                qBtns[i] = AddButton(box.rectTransform, "Quality_" + qn[i], qn[i].ToUpper(), 24);
-                float x0 = 0.06f + i * qw;
-                Region(qBtns[i].GetComponent<RectTransform>(), x0 + 0.005f, 0.77f, x0 + qw - 0.005f, 0.84f);
+                qBtns[i] = AddButton(qGridGo, "Quality_" + qn[i], qn[i].ToUpper(), 20, ButtonVariant.Compact);
+                var j = qBtns[i].GetComponent<UIButtonJuice>();
+                if (j) j.driveLabelColor = false; // SettingsManager.HighlightQuality manages text contrast
                 UnityEventTools.AddIntPersistentListener(qBtns[i].onClick, settings.SetQuality, i);
             }
 
-            // Resolution selector:  RESOLUÇÃO   [<]  1920 x 1080  [>]
-            Text rl = AddText(box.rectTransform, "ResolutionLabel", "RESOLUÇÃO", 28, Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
-            Region(rl.rectTransform, 0.06f, 0.68f, 0.32f, 0.75f);
-            Button resPrev = AddButton(box.rectTransform, "Btn_ResPrev", "<", 32);
-            Region(resPrev.GetComponent<RectTransform>(), 0.34f, 0.68f, 0.42f, 0.75f);
-            Text resText = AddText(box.rectTransform, "ResolutionValue", "1920 x 1080", 30, Parchment, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(resText.rectTransform, 0.43f, 0.68f, 0.85f, 0.75f);
-            Button resNext = AddButton(box.rectTransform, "Btn_ResNext", ">", 32);
-            Region(resNext.GetComponent<RectTransform>(), 0.86f, 0.68f, 0.94f, 0.75f);
+            Text rl = AddText(leftCol.rectTransform, "ResolutionLabel", "RESOLUÇÃO", 20, IvoryMuted, TextAnchor.MiddleLeft, FontStyle.Bold);
+            SetLayoutElement(rl.gameObject, preferredHeight: 28f);
+
+            RectTransform resRow = NewRect("ResolutionRow", leftCol.rectTransform);
+            SetLayoutElement(resRow.gameObject, preferredHeight: 54f);
+            var resHlg = resRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            resHlg.spacing = 12f;
+            resHlg.childControlWidth = true;
+            resHlg.childControlHeight = true;
+            resHlg.childForceExpandWidth = false;
+            resHlg.childForceExpandHeight = true;
+
+            Button resPrev = AddButton(resRow, "Btn_ResPrev", "◀", 26, ButtonVariant.Compact);
+            SetLayoutElement(resPrev.gameObject, preferredWidth: 64f);
+
+            Image resBox = AddFramedPanel(resRow, "ResolutionBox", SlotDark, MutedGold, false);
+            SetLayoutElement(resBox.gameObject, flexibleWidth: 1f);
+            Text resText = AddText(resBox.rectTransform, "ResolutionValue", "1920 x 1080", 26, Ivory, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Stretch(resText.rectTransform);
+
+            Button resNext = AddButton(resRow, "Btn_ResNext", "▶", 26, ButtonVariant.Compact);
+            SetLayoutElement(resNext.gameObject, preferredWidth: 64f);
+
             UnityEventTools.AddPersistentListener(resPrev.onClick, settings.PrevResolution);
             UnityEventTools.AddPersistentListener(resNext.onClick, settings.NextResolution);
 
-            Toggle vsync = AddToggle(box.rectTransform, "VSyncToggle", "V-SYNC");
-            Region(vsync.GetComponent<RectTransform>(), 0.06f, 0.59f, 0.48f, 0.66f);
+            // Toggle row (V-Sync & Tela Cheia)
+            RectTransform toggleRow = NewRect("ToggleRow", leftCol.rectTransform);
+            SetLayoutElement(toggleRow.gameObject, preferredHeight: 60f);
+            var togHlg = toggleRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            togHlg.spacing = 14f;
+            togHlg.childControlWidth = true;
+            togHlg.childControlHeight = true;
+            togHlg.childForceExpandWidth = true;
+            togHlg.childForceExpandHeight = true;
+
+            Toggle vsync = AddToggle(toggleRow, "VSyncToggle", "V-SYNC");
             UnityEventTools.AddPersistentListener<bool>(vsync.onValueChanged, settings.SetVSync);
-            Toggle full = AddToggle(box.rectTransform, "FullscreenToggle", "TELA CHEIA");
-            Region(full.GetComponent<RectTransform>(), 0.52f, 0.59f, 0.94f, 0.66f);
+            Toggle full = AddToggle(toggleRow, "FullscreenToggle", "TELA CHEIA");
             UnityEventTools.AddPersistentListener<bool>(full.onValueChanged, settings.SetFullscreen);
 
-            // Volume sliders
-            Text vl = AddText(box.rectTransform, "VolumeLabel", "VOLUME", 28, Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
-            Region(vl.rectTransform, 0.06f, 0.52f, 0.60f, 0.57f);
+            // Center vertical divider strip
+            Image centerSep = AddImage(body, "ColumnDivider", new Color(0.84f, 0.67f, 0.27f, 0.35f), null, false);
+            SetLayoutElement(centerSep.gameObject, preferredWidth: 2f);
+
+            // Right column: Audio & Mixing
+            Image rightCol = AddFramedPanel(body, "RightColumn", CardSurface, MutedGold, false);
+            var rightLe = rightCol.gameObject.AddComponent<LayoutElement>();
+            rightLe.flexibleWidth = 1.0f;
+
+            var rightVlg = rightCol.gameObject.AddComponent<VerticalLayoutGroup>();
+            rightVlg.padding = new RectOffset(22, 22, 18, 18);
+            rightVlg.spacing = 16f;
+            rightVlg.childAlignment = TextAnchor.UpperLeft;
+            rightVlg.childControlWidth = true;
+            rightVlg.childControlHeight = true;
+            rightVlg.childForceExpandWidth = true;
+            rightVlg.childForceExpandHeight = false;
+
+            Text secAudio = AddText(rightCol.rectTransform, "AudioSection", "ÁUDIO & MIXAGEM", 25, AntiqueGold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            SetLayoutElement(secAudio.gameObject, preferredHeight: 34f);
+            AddLayoutDivider(rightCol.rectTransform, "AudioDivider", AntiqueGold);
+
             string[] names = { "MASTER", "MÚSICA", "EFEITOS", "VOZES" };
             var sliders = new Slider[names.Length];
             for (int i = 0; i < names.Length; i++)
             {
-                float y = 0.43f - i * 0.085f;
-                Text l = AddText(box.rectTransform, names[i] + "Label", names[i], 26, Parchment, TextAnchor.MiddleLeft);
-                Region(l.rectTransform, 0.06f, y, 0.30f, y + 0.07f);
-                sliders[i] = AddSlider(box.rectTransform, names[i] + "Slider");
-                Region(sliders[i].GetComponent<RectTransform>(), 0.32f, y + 0.01f, 0.94f, y + 0.06f);
+                Image volCard = AddFramedPanel(rightCol.rectTransform, names[i] + "Row", SlotDark, new Color(0.56f, 0.44f, 0.18f, 0.55f), false);
+                SetLayoutElement(volCard.gameObject, preferredHeight: 62f);
+
+                var rowHlg = volCard.gameObject.AddComponent<HorizontalLayoutGroup>();
+                rowHlg.padding = new RectOffset(16, 16, 10, 10);
+                rowHlg.spacing = 16f;
+                rowHlg.childAlignment = TextAnchor.MiddleCenter;
+                rowHlg.childControlWidth = true;
+                rowHlg.childControlHeight = true;
+                rowHlg.childForceExpandWidth = false;
+                rowHlg.childForceExpandHeight = false;
+
+                Text l = AddText(volCard.rectTransform, names[i] + "Label", names[i], 23, Ivory, TextAnchor.MiddleLeft, FontStyle.Bold);
+                SetLayoutElement(l.gameObject, preferredWidth: 132f, preferredHeight: 36f);
+
+                sliders[i] = AddSlider(volCard.rectTransform, names[i] + "Slider");
+                SetLayoutElement(sliders[i].gameObject, flexibleWidth: 1f, preferredHeight: 36f);
             }
             UnityEventTools.AddPersistentListener<float>(sliders[0].onValueChanged, settings.SetMasterVol);
             UnityEventTools.AddPersistentListener<float>(sliders[1].onValueChanged, settings.SetMusicVol);
             UnityEventTools.AddPersistentListener<float>(sliders[2].onValueChanged, settings.SetSFXVol);
             UnityEventTools.AddPersistentListener<float>(sliders[3].onValueChanged, settings.SetVoiceVol);
 
-            Button reset = AddButton(box.rectTransform, "Btn_Reset", "RESET", 30);
-            Region(reset.GetComponent<RectTransform>(), 0.06f, 0.03f, 0.32f, 0.11f);
-            UnityEventTools.AddPersistentListener(reset.onClick, settings.ResetToDefaults);
-            Button apply = AddButton(box.rectTransform, "Btn_Aplicar", "APLICAR", 30);
-            Region(apply.GetComponent<RectTransform>(), 0.37f, 0.03f, 0.63f, 0.11f);
-            UnityEventTools.AddPersistentListener(apply.onClick, settings.Apply);
-            Button back = AddButton(box.rectTransform, "Btn_Voltar", "VOLTAR", 30);
-            Region(back.GetComponent<RectTransform>(), 0.68f, 0.03f, 0.94f, 0.11f);
-            UnityEventTools.AddPersistentListener(back.onClick, settings.Discard);          // 1) discard unapplied changes
-            UnityEventTools.AddPersistentListener(back.onClick, title.ReturnToTitle);       // 2) close the panel
+            Text audioNote = AddText(rightCol.rectTransform, "AudioHint",
+                "Ajustes de áudio são pré-visualizados em tempo real.\nClique em APLICAR para salvar permanentemente.",
+                18, IvoryMuted, TextAnchor.MiddleLeft, FontStyle.Italic);
+            SetLayoutElement(audioNote.gameObject, preferredHeight: 58f);
 
-            // SettingsManager wiring (audioMixer stays empty: assign one with exposed Vol_Master/Music/SFX/Voice)
-            settings.qualityButtons  = qBtns;
-            settings.vsyncToggle     = vsync;
-            settings.fullscreenToggle= full;
+            // Bottom divider & Action bar (RESET | VOLTAR | APLICAR)
+            AddDivider(box.rectTransform, "FooterDivider", AntiqueGold, 0.04f, 0.132f, 0.96f, 0.148f);
+
+            RectTransform footer = NewRect("FooterActions", box.rectTransform);
+            Region(footer, 0.025f, 0.025f, 0.975f, 0.125f);
+            var footHlg = footer.gameObject.AddComponent<HorizontalLayoutGroup>();
+            footHlg.padding = new RectOffset(16, 16, 6, 6);
+            footHlg.spacing = 18f;
+            footHlg.childAlignment = TextAnchor.MiddleCenter;
+            footHlg.childControlWidth = true;
+            footHlg.childControlHeight = true;
+            footHlg.childForceExpandWidth = false;
+            footHlg.childForceExpandHeight = true;
+
+            Button reset = AddButton(footer, "Btn_Reset", "RESET", 26, ButtonVariant.SecondaryDanger);
+            SetLayoutElement(reset.gameObject, preferredWidth: 210f);
+            UnityEventTools.AddPersistentListener(reset.onClick, settings.ResetToDefaults);
+
+            RectTransform spacer = NewRect("Spacer", footer);
+            SetLayoutElement(spacer.gameObject, flexibleWidth: 1f);
+
+            Button back = AddButton(footer, "Btn_Voltar", "VOLTAR", 26, ButtonVariant.Default);
+            SetLayoutElement(back.gameObject, preferredWidth: 230f);
+            UnityEventTools.AddPersistentListener(back.onClick, settings.Discard);
+            UnityEventTools.AddPersistentListener(back.onClick, title.ReturnToTitle);
+
+            Button apply = AddButton(footer, "Btn_Aplicar", "APLICAR", 28, ButtonVariant.PrimaryCrimson);
+            SetLayoutElement(apply.gameObject, preferredWidth: 260f);
+            UnityEventTools.AddPersistentListener(apply.onClick, settings.Apply);
+
+            // SettingsManager wiring
+            settings.qualityButtons       = qBtns;
+            settings.vsyncToggle          = vsync;
+            settings.fullscreenToggle     = full;
             settings.prevResolutionButton = resPrev;
             settings.nextResolutionButton = resNext;
             settings.resolutionLabel      = resText;
-            settings.masterSlider    = sliders[0];
-            settings.musicSlider     = sliders[1];
-            settings.sfxSlider       = sliders[2];
-            settings.voiceSlider     = sliders[3];
+            settings.masterSlider         = sliders[0];
+            settings.musicSlider          = sliders[1];
+            settings.sfxSlider            = sliders[2];
+            settings.voiceSlider          = sliders[3];
             EditorUtility.SetDirty(settings);
 
             panel.gameObject.SetActive(false);
             return panel.gameObject;
         }
 
-        // ═════════════════════════════════════════════════════
+        // ═════════════════════════════════════════════════════════════════════
         //  CharSelect
-        // ═════════════════════════════════════════════════════
+        // ═════════════════════════════════════════════════════════════════════
         static void BuildCharSelect()
         {
+            EnsureUISprites();
             Scene scene = OpenScene("CharSelect");
             ClearGenerated(scene);
             SetupCamera();
@@ -258,13 +457,17 @@ namespace EcclesiaFighters.EditorTools
 
             Image bg = AddImage(root, "Background", Color.white, LoadSprite("Backgrounds/BG_CharSelect.jpg"), false);
             Stretch(bg.rectTransform);
-            Image dim = AddImage(root, "Dim", new Color(0f, 0f, 0f, 0.45f), null, false);
+            Image dim = AddImage(root, "Dim", new Color(0.02f, 0.01f, 0.04f, 0.56f), null, false);
             Stretch(dim.rectTransform);
 
-            Text header = AddText(root, "Header", "ESCOLHA SEU LUTADOR", 64, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(header.rectTransform, 0.1f, 0.89f, 0.9f, 0.99f); AddShadow(header);
+            // Framed top banner
+            Image banner = AddFramedPanel(root, "HeaderBanner", BurgundyPanel, AntiqueGold, false);
+            Region(banner.rectTransform, 0.14f, 0.87f, 0.86f, 0.97f);
+            Text header = AddText(banner.rectTransform, "Header", "ESCOLHA SEU LUTADOR", 52, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Stretch(header.rectTransform);
+            AddStrongTextEffects(header, 2.5f, 3.5f);
 
-            // Roster (index 0 = Agostinho, 1 = Marx — same order FightSceneManager.characterPrefabs expects)
+            // Roster (0 = Agostinho, 1 = Marx)
             mgr.characters = new List<CharacterData>
             {
                 new CharacterData
@@ -285,26 +488,35 @@ namespace EcclesiaFighters.EditorTools
                 }
             };
 
-            BuildFighterCard(root, "PlayerCardA", "JOGADOR 1", 0.06f, 0.44f, FaithBlue, mgr, true,
+            mgr.buttonsA = BuildFighterCard(root, "PlayerCardA", "JOGADOR 1  ·  ORDEM DA FÉ",
+                "ESTILO: LUZ SAGRADA & CONTRA-ATAQUE", 0.05f, 0.44f, FaithBlue, mgr, true,
                 out mgr.portraitA, out mgr.nameA, out mgr.descA);
-            BuildFighterCard(root, "PlayerCardB", "CPU", 0.56f, 0.94f, IdeoRed, mgr, false,
+            mgr.buttonsB = BuildFighterCard(root, "PlayerCardB", "CPU  ·  VANGUARDA IDEOLÓGICA",
+                "ESTILO: PRESSÃO & LONGO ALCANCE", 0.56f, 0.95f, IdeoCrimson, mgr, false,
                 out mgr.portraitB, out mgr.nameB, out mgr.descB);
 
-            Text vs = AddText(root, "VS", "VS", 90, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(vs.rectTransform, 0.44f, 0.42f, 0.56f, 0.60f); AddShadow(vs);
+            // Ornate VS medallion
+            Image vsCrest = AddFramedPanel(root, "VSCrest", BurgundyPanel, BrightGold, false);
+            Region(vsCrest.rectTransform, 0.452f, 0.43f, 0.548f, 0.58f);
+            Text vs = AddText(vsCrest.rectTransform, "VS", "VS", 64, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Stretch(vs.rectTransform);
+            AddStrongTextEffects(vs, 3f, 4f);
 
-            mgr.confirmText = AddText(root, "ConfirmText", "Selecione os lutadores e confirme", 30, Gold, TextAnchor.MiddleCenter, FontStyle.Italic);
-            Region(mgr.confirmText.rectTransform, 0.2f, 0.115f, 0.8f, 0.165f); AddShadow(mgr.confirmText);
+            // Status strip & buttons
+            Image statusBar = AddFramedPanel(root, "StatusStrip", ObsidianPanel, MutedGold, false);
+            Region(statusBar.rectTransform, 0.24f, 0.125f, 0.76f, 0.175f);
+            mgr.confirmText = AddText(statusBar.rectTransform, "ConfirmText", "Selecione os lutadores e confirme", 26, BrightGold, TextAnchor.MiddleCenter, FontStyle.Italic);
+            Stretch(mgr.confirmText.rectTransform);
 
-            Button confirm = AddButton(root, "Btn_Confirmar", "CONFIRMAR", 40);
-            Region(confirm.GetComponent<RectTransform>(), 0.38f, 0.03f, 0.62f, 0.11f);
+            Button confirm = AddButton(root, "Btn_Confirmar", "CONFIRMAR", 36, ButtonVariant.PrimaryCrimson);
+            Region(confirm.GetComponent<RectTransform>(), 0.37f, 0.028f, 0.63f, 0.112f);
             UnityEventTools.AddPersistentListener(confirm.onClick, mgr.OnConfirm);
 
-            Button back = AddButton(root, "Btn_Voltar", "VOLTAR", 32);
-            Region(back.GetComponent<RectTransform>(), 0.03f, 0.03f, 0.15f, 0.10f);
+            Button back = AddButton(root, "Btn_Voltar", "VOLTAR", 28, ButtonVariant.Default);
+            Region(back.GetComponent<RectTransform>(), 0.045f, 0.032f, 0.185f, 0.105f);
             UnityEventTools.AddPersistentListener(back.onClick, mgr.OnBack);
 
-            mgr.titleManager = null;     // TitleScreenManager lives in another scene → OnBack/OnConfirm use scene loading
+            mgr.titleManager = null;
             mgr.nextScene = "MapSelect";
             mgr.backScene = "TitleScreen";
             EditorUtility.SetDirty(mgr);
@@ -313,48 +525,70 @@ namespace EcclesiaFighters.EditorTools
             Debug.Log("[MenuSceneBuilder] CharSelect built.");
         }
 
-        static void BuildFighterCard(RectTransform root, string name, string tag,
+        static Button[] BuildFighterCard(RectTransform root, string name, string tag, string styleBadge,
             float x0, float x1, Color accent, CharacterSelectManager mgr, bool isA,
             out Image portrait, out Text nameText, out Text descText)
         {
-            Image card = AddImage(root, name, PanelDark);
-            Region(card.rectTransform, x0, 0.17f, x1, 0.86f);
-            AddOutline(card, accent, 3f);
+            Image card = AddFramedPanel(root, name, CardSurface, accent, true);
+            Region(card.rectTransform, x0, 0.19f, x1, 0.845f);
 
-            Text tagText = AddText(card.rectTransform, "Tag", tag, 30, accent, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(tagText.rectTransform, 0.05f, 0.92f, 0.95f, 0.99f);
+            // Top faction header strip
+            Image tagBar = AddFramedPanel(card.rectTransform, "TagBar",
+                isA ? new Color(0.08f, 0.16f, 0.28f, 0.94f) : BurgundyPanel, accent, false);
+            Region(tagBar.rectTransform, 0.03f, 0.90f, 0.97f, 0.975f);
+            Text tagText = AddText(tagBar.rectTransform, "Tag", tag, 22, accent, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Stretch(tagText.rectTransform);
 
-            portrait = AddImage(card.rectTransform, "Portrait", Color.white, null, false);
-            Region(portrait.rectTransform, 0.08f, 0.38f, 0.92f, 0.91f);
+            // Recessed portrait frame
+            Image portraitSlot = AddFramedPanel(card.rectTransform, "PortraitFrame", SlotDark, MutedGold, false);
+            Region(portraitSlot.rectTransform, 0.05f, 0.41f, 0.95f, 0.885f);
+            portrait = AddImage(portraitSlot.rectTransform, "Portrait", Color.white, null, false);
+            Region(portrait.rectTransform, 0.03f, 0.03f, 0.97f, 0.97f);
             portrait.preserveAspect = true;
 
-            nameText = AddText(card.rectTransform, "Name", "—", 46, accent, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(nameText.rectTransform, 0.05f, 0.29f, 0.95f, 0.38f);
-            nameText.resizeTextForBestFit = true; nameText.resizeTextMinSize = 20; nameText.resizeTextMaxSize = 46;
-            AddShadow(nameText);
+            // Name + divider + bio
+            nameText = AddText(card.rectTransform, "Name", "—", 40, accent, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(nameText.rectTransform, 0.05f, 0.31f, 0.95f, 0.40f);
+            nameText.resizeTextForBestFit = true; nameText.resizeTextMinSize = 20; nameText.resizeTextMaxSize = 42;
+            AddStrongTextEffects(nameText, 2f, 3f);
 
-            descText = AddText(card.rectTransform, "Description", "", 26, Parchment, TextAnchor.UpperCenter);
-            Region(descText.rectTransform, 0.07f, 0.14f, 0.93f, 0.29f);
+            AddDivider(card.rectTransform, "CardDivider", AntiqueGold, 0.08f, 0.295f, 0.92f, 0.312f);
 
-            // One small roster button per character → SelectA(i) / SelectB(i)
+            descText = AddText(card.rectTransform, "Description", "", 22, Ivory, TextAnchor.UpperCenter);
+            Region(descText.rectTransform, 0.06f, 0.185f, 0.94f, 0.292f);
+
+            Text badge = AddText(card.rectTransform, "StyleBadge", styleBadge, 17, AntiqueGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(badge.rectTransform, 0.06f, 0.135f, 0.94f, 0.185f);
+
+            // Roster buttons via HorizontalLayoutGroup
+            RectTransform pickRow = NewRect("PickRow", card.rectTransform);
+            Region(pickRow, 0.04f, 0.025f, 0.96f, 0.125f);
+            var hlg = pickRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hlg.spacing = 12f;
+            hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
+            hlg.childForceExpandWidth = true;
+            hlg.childForceExpandHeight = true;
+
             int n = mgr.characters.Count;
-            float bw = 0.90f / Mathf.Max(1, n);
+            var pickButtons = new Button[n];
             for (int i = 0; i < n; i++)
             {
-                Button b = AddButton(card.rectTransform, "Pick_" + mgr.characters[i].characterName.Replace(" ", ""),
-                                     mgr.characters[i].characterName.ToUpper(), 24);
-                float bx = 0.05f + i * bw;
-                Region(b.GetComponent<RectTransform>(), bx + 0.008f, 0.02f, bx + bw - 0.008f, 0.12f);
+                Button b = AddButton(pickRow, "Pick_" + mgr.characters[i].characterName.Replace(" ", ""),
+                    mgr.characters[i].characterName.ToUpper(), 22, ButtonVariant.Compact);
+                pickButtons[i] = b;
                 if (isA) UnityEventTools.AddIntPersistentListener(b.onClick, mgr.SelectA, i);
                 else     UnityEventTools.AddIntPersistentListener(b.onClick, mgr.SelectB, i);
             }
+            return pickButtons;
         }
 
-        // ═════════════════════════════════════════════════════
+        // ═════════════════════════════════════════════════════════════════════
         //  MapSelect
-        // ═════════════════════════════════════════════════════
+        // ═════════════════════════════════════════════════════════════════════
         static void BuildMapSelect()
         {
+            EnsureUISprites();
             Scene scene = OpenScene("MapSelect");
             ClearGenerated(scene);
             SetupCamera();
@@ -364,61 +598,71 @@ namespace EcclesiaFighters.EditorTools
 
             Image bg = AddImage(root, "Background", Color.white, LoadSprite("Backgrounds/BG_CharSelect_Dark.jpg"), false);
             Stretch(bg.rectTransform);
-            Image dim = AddImage(root, "Dim", new Color(0f, 0f, 0f, 0.35f), null, false);
+            Image dim = AddImage(root, "Dim", new Color(0.02f, 0.01f, 0.04f, 0.50f), null, false);
             Stretch(dim.rectTransform);
 
-            Text header = AddText(root, "Header", "ESCOLHA O CAMPO DE BATALHA", 60, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(header.rectTransform, 0.1f, 0.89f, 0.9f, 0.99f); AddShadow(header);
+            // Top banner
+            Image banner = AddFramedPanel(root, "HeaderBanner", BurgundyPanel, AntiqueGold, false);
+            Region(banner.rectTransform, 0.14f, 0.87f, 0.86f, 0.97f);
+            Text header = AddText(banner.rectTransform, "Header", "ESCOLHA O CAMPO DE BATALHA", 48, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Stretch(header.rectTransform);
+            AddStrongTextEffects(header, 2.5f, 3.5f);
 
-            // ── VS bar ──
-            Image vsBar = AddImage(root, "VSBar", PanelDark, null, false);
-            Region(vsBar.rectTransform, 0.25f, 0.78f, 0.75f, 0.87f);
-            AddOutline(vsBar, Gold, 2f);
-            mgr.nameA = AddText(vsBar.rectTransform, "NameA", "JOGADOR 1", 40, FaithBlue, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(mgr.nameA.rectTransform, 0.02f, 0f, 0.40f, 1f);
-            Text vs = AddText(vsBar.rectTransform, "VS", "VS", 46, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(vs.rectTransform, 0.40f, 0f, 0.60f, 1f);
-            mgr.nameB = AddText(vsBar.rectTransform, "NameB", "JOGADOR 2", 40, IdeoRed, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(mgr.nameB.rectTransform, 0.60f, 0f, 0.98f, 1f);
-            mgr.nameA.resizeTextForBestFit = true; mgr.nameA.resizeTextMinSize = 18; mgr.nameA.resizeTextMaxSize = 40;
-            mgr.nameB.resizeTextForBestFit = true; mgr.nameB.resizeTextMinSize = 18; mgr.nameB.resizeTextMaxSize = 40;
+            // VS matchup bar
+            Image vsBar = AddFramedPanel(root, "VSBar", ObsidianPanel, AntiqueGold, false);
+            Region(vsBar.rectTransform, 0.22f, 0.76f, 0.78f, 0.845f);
 
-            // ── Map cards ──
+            mgr.nameA = AddText(vsBar.rectTransform, "NameA", "JOGADOR 1", 36, FaithBlue, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(mgr.nameA.rectTransform, 0.03f, 0f, 0.42f, 1f);
+            Text vs = AddText(vsBar.rectTransform, "VS", "VS", 42, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(vs.rectTransform, 0.42f, 0f, 0.58f, 1f);
+            mgr.nameB = AddText(vsBar.rectTransform, "NameB", "JOGADOR 2", 36, IdeoCrimson, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(mgr.nameB.rectTransform, 0.58f, 0f, 0.97f, 1f);
+            mgr.nameA.resizeTextForBestFit = true; mgr.nameA.resizeTextMinSize = 18; mgr.nameA.resizeTextMaxSize = 36;
+            mgr.nameB.resizeTextForBestFit = true; mgr.nameB.resizeTextMinSize = 18; mgr.nameB.resizeTextMaxSize = 36;
+
+            // Stage cards
             mgr.bgExterior = LoadSprite("Backgrounds/BG_MapExterior.jpg");
             mgr.bgInterior = LoadSprite("Backgrounds/BG_MapInterior.jpg");
-            Button ext = BuildMapCard(root, "CardExterior", "FACHADA DA IGREJA", mgr.bgExterior, 0.07f, 0.48f, out mgr.cardExterior);
-            Button inn = BuildMapCard(root, "CardInterior", "INTERIOR SAGRADO",   mgr.bgInterior, 0.52f, 0.93f, out mgr.cardInterior);
+            Button ext = BuildMapCard(root, "CardExterior", "FACHADA DA IGREJA", "Pátio da Catedral  ·  Crepúsculo",
+                mgr.bgExterior, 0.06f, 0.48f, out mgr.cardExterior);
+            Button inn = BuildMapCard(root, "CardInterior", "INTERIOR SAGRADO",  "Nave Central  ·  Altar de Ouro",
+                mgr.bgInterior, 0.52f, 0.94f, out mgr.cardInterior);
             UnityEventTools.AddPersistentListener(ext.onClick, mgr.SelectExterior);
             UnityEventTools.AddPersistentListener(inn.onClick, mgr.SelectInterior);
 
-            // ── Go / Back ──
-            mgr.goBtn = AddButton(root, "Btn_IniciarLuta", "INICIAR LUTA", 40);
-            Region(mgr.goBtn.GetComponent<RectTransform>(), 0.38f, 0.05f, 0.62f, 0.14f);
+            // Go / Back
+            mgr.goBtn = AddButton(root, "Btn_IniciarLuta", "INICIAR LUTA", 36, ButtonVariant.PrimaryCrimson);
+            Region(mgr.goBtn.GetComponent<RectTransform>(), 0.37f, 0.032f, 0.63f, 0.125f);
             UnityEventTools.AddPersistentListener(mgr.goBtn.onClick, mgr.OnConfirm);
 
-            Button back = AddButton(root, "Btn_Voltar", "VOLTAR", 32);
-            Region(back.GetComponent<RectTransform>(), 0.03f, 0.05f, 0.15f, 0.12f);
+            Button back = AddButton(root, "Btn_Voltar", "VOLTAR", 28, ButtonVariant.Default);
+            Region(back.GetComponent<RectTransform>(), 0.045f, 0.035f, 0.185f, 0.11f);
             UnityEventTools.AddPersistentListener(back.onClick, mgr.OnBack);
 
-            // ── Fight intro overlay (activated by MapSelectManager.FightIntro) ──
+            // Fight intro overlay
             RectTransform fo = NewRect("FightOverlay", root); Stretch(fo);
             mgr.fightOverlay = fo.gameObject.AddComponent<CanvasGroup>();
             mgr.fightOverlay.alpha = 0f;
-            Image foBg = AddImage(fo, "Background", new Color(0f, 0f, 0f, 0.95f), null, true);
+            Image foBg = AddImage(fo, "Background", new Color(0.02f, 0.01f, 0.04f, 0.96f), null, true);
             Stretch(foBg.rectTransform);
-            Text pre = AddText(fo, "Prepare", "PREPARE-SE PARA A LUTA", 36, Parchment, TextAnchor.MiddleCenter, FontStyle.Italic);
-            Region(pre.rectTransform, 0.1f, 0.66f, 0.9f, 0.74f);
-            mgr.fightMapText = AddText(fo, "MapText", "", 84, Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(mgr.fightMapText.rectTransform, 0.05f, 0.50f, 0.95f, 0.66f); AddShadow(mgr.fightMapText);
-            mgr.fightNamesText = AddText(fo, "NamesText", "", 52, Parchment, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Region(mgr.fightNamesText.rectTransform, 0.05f, 0.36f, 0.95f, 0.50f); AddShadow(mgr.fightNamesText);
+            Image foFrame = AddFramedPanel(fo, "IntroFrame", BurgundyPanel, BrightGold, false);
+            Region(foFrame.rectTransform, 0.12f, 0.25f, 0.88f, 0.75f);
+            Text pre = AddText(foFrame.rectTransform, "Prepare", "PREPARE-SE PARA A LUTA", 34, IvoryMuted, TextAnchor.MiddleCenter, FontStyle.Italic);
+            Region(pre.rectTransform, 0.06f, 0.72f, 0.94f, 0.90f);
+            mgr.fightMapText = AddText(foFrame.rectTransform, "MapText", "", 76, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(mgr.fightMapText.rectTransform, 0.04f, 0.36f, 0.96f, 0.72f);
+            AddStrongTextEffects(mgr.fightMapText, 3f, 4f);
+            AddDivider(foFrame.rectTransform, "IntroDivider", AntiqueGold, 0.15f, 0.29f, 0.85f, 0.34f);
+            mgr.fightNamesText = AddText(foFrame.rectTransform, "NamesText", "", 44, Ivory, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(mgr.fightNamesText.rectTransform, 0.05f, 0.08f, 0.95f, 0.28f);
             fo.gameObject.SetActive(false);
 
             Image fade = AddImage(root, "FadeOverlay", new Color(0f, 0f, 0f, 0f), null, false);
             Stretch(fade.rectTransform);
             mgr.fadeOverlay = fade;
 
-            mgr.titleManager = null;      // TitleScreenManager lives in another scene → OnBack loads backScene
+            mgr.titleManager = null;
             mgr.backScene = "CharSelect";
             EditorUtility.SetDirty(mgr);
 
@@ -426,28 +670,393 @@ namespace EcclesiaFighters.EditorTools
             Debug.Log("[MenuSceneBuilder] MapSelect built.");
         }
 
-        static Button BuildMapCard(RectTransform root, string name, string label, Sprite sprite,
+        static Button BuildMapCard(RectTransform root, string name, string label, string subtitle, Sprite sprite,
             float x0, float x1, out Image cardImage)
         {
             cardImage = AddImage(root, name, Color.white, sprite, true);
-            Region(cardImage.rectTransform, x0, 0.20f, x1, 0.74f);
-            AddOutline(cardImage, Gold, 3f);
+            Region(cardImage.rectTransform, x0, 0.175f, x1, 0.735f);
+            AddOutline(cardImage, MutedGold, 2f);
+
+            // Ornate border frame overlaid cleanly above the artwork
+            Image frame = AddImage(cardImage.rectTransform, "OrnateFrame", MutedGold, sprFrameOrnate, false);
+            frame.type = Image.Type.Sliced;
+            Stretch(frame.rectTransform);
 
             var btn = cardImage.gameObject.AddComponent<Button>();
             btn.targetGraphic = cardImage;
-            btn.transition = Selectable.Transition.None;      // MapSelectManager.HighlightCard tints the Image itself
+            btn.transition = Selectable.Transition.None; // MapSelectManager.HighlightCard + UIButtonJuice handle states
             btn.navigation = new Navigation { mode = Navigation.Mode.None };
 
-            Image strip = AddImage(cardImage.rectTransform, "LabelBar", new Color(0f, 0f, 0f, 0.72f), null, false);
-            Region(strip.rectTransform, 0f, 0f, 1f, 0.16f);
-            Text t = AddText(strip.rectTransform, "Label", label, 40, Parchment, TextAnchor.MiddleCenter, FontStyle.Bold);
-            Stretch(t.rectTransform); AddShadow(t);
+            Image strip = AddImage(cardImage.rectTransform, "LabelBar", new Color(0.04f, 0.02f, 0.06f, 0.88f), sprPanel, false);
+            strip.type = Image.Type.Sliced;
+            Region(strip.rectTransform, 0.02f, 0.02f, 0.98f, 0.22f);
+
+            Text t = AddText(strip.rectTransform, "Label", label, 36, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(t.rectTransform, 0.04f, 0.36f, 0.96f, 0.95f);
+            AddStrongTextEffects(t, 2f, 3f);
+
+            Text sub = AddText(strip.rectTransform, "Subtitle", subtitle, 20, IvoryMuted, TextAnchor.MiddleCenter, FontStyle.Italic);
+            Region(sub.rectTransform, 0.04f, 0.05f, 0.96f, 0.40f);
+
+            var juice = cardImage.gameObject.AddComponent<UIButtonJuice>();
+            juice.targetBackground = null; // keep stage artwork tinting owned by MapSelectManager.HighlightCard
+            juice.targetFrame      = frame;
+            juice.targetLabel      = t;
+            juice.driveLabelColor  = false;
+            juice.normalFrame      = MutedGold;
+            juice.hoverFrame       = AntiqueGold;
+            juice.selectedFrame    = BrightGold;
+            juice.hoverScale       = 1.015f;
+            juice.selectedScale    = 1.025f;
+            juice.pressedScale     = 0.985f;
             return btn;
         }
 
-        // ═════════════════════════════════════════════════════
-        //  Scene helpers
-        // ═════════════════════════════════════════════════════
+        // ═════════════════════════════════════════════════════════════════════
+        //  FightScene HUD (EcclesiaFighters ▸ Menus ▸ Rebuild Fight HUD)
+        // ═════════════════════════════════════════════════════════════════════
+        static void BuildFightHud()
+        {
+            Scene scene = OpenScene("FightScene");
+            var mgr = UnityEngine.Object.FindObjectOfType<FightSceneManager>();
+            if (!mgr)
+            {
+                Debug.LogError("[MenuSceneBuilder] FightSceneManager not found in FightScene.");
+                return;
+            }
+
+            // Rescue any non-UI scene lights living inside Canvas (e.g., Light (1)) before replacing Canvas
+            Canvas oldCanvas = UnityEngine.Object.FindObjectOfType<Canvas>();
+            if (oldCanvas)
+            {
+                foreach (Light l in oldCanvas.GetComponentsInChildren<Light>(true))
+                {
+                    Vector3 wp = l.transform.position;
+                    Quaternion wr = l.transform.rotation;
+                    l.transform.SetParent(null, false);
+                    l.transform.SetPositionAndRotation(wp, wr);
+                    l.transform.localScale = Vector3.one;
+                }
+                UnityEngine.Object.DestroyImmediate(oldCanvas.gameObject);
+            }
+
+            foreach (EventSystem existingEs in UnityEngine.Object.FindObjectsOfType<EventSystem>())
+                UnityEngine.Object.DestroyImmediate(existingEs.gameObject);
+
+            RectTransform root = CreateCanvas();
+
+            // ── HUD Container (fades in after ROUND 1 / FIGHT!) ──
+            RectTransform hudRt = NewRect("HUD", root); Stretch(hudRt);
+            CanvasGroup hudGroup = hudRt.gameObject.AddComponent<CanvasGroup>();
+
+            // Top Arcade Bar
+            RectTransform topBar = NewRect("TopBar", hudRt);
+            Region(topBar, 0.025f, 0.815f, 0.975f, 0.975f);
+
+            // P1 Health Cluster (Left → drains toward center timer)
+            Slider hpA = BuildArcadeHealthBar(topBar, "P1Cluster", "SANTO AGOSTINHO", FaithBlue,
+                new Color(0.86f, 0.68f, 0.24f, 1f), 0f, 0.435f, true, Mathf.Max(1, mgr.roundsToWin),
+                out Text nameA, out Text winsA);
+
+            // Center Timer Badge
+            Image timerBadge = AddFramedPanel(topBar, "TimerBadge", BurgundyPanel, BrightGold, false);
+            Region(timerBadge.rectTransform, 0.445f, 0.06f, 0.555f, 0.96f);
+            Text timerSub = AddText(timerBadge.rectTransform, "TimerLabel", "TEMPO", 16, AntiqueGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(timerSub.rectTransform, 0.05f, 0.68f, 0.95f, 0.94f);
+            Text timerTxt = AddText(timerBadge.rectTransform, "TimerText", Mathf.CeilToInt(mgr.roundTime).ToString(),
+                54, Ivory, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(timerTxt.rectTransform, 0.05f, 0.04f, 0.95f, 0.72f);
+            AddStrongTextEffects(timerTxt, 2.5f, 3f);
+
+            // P2 Health Cluster (Right → drains toward center timer)
+            Slider hpB = BuildArcadeHealthBar(topBar, "P2Cluster", "KARL MARX", IdeoCrimson,
+                Crimson, 0.565f, 1f, false, Mathf.Max(1, mgr.roundsToWin),
+                out Text nameB, out Text winsB);
+
+            // Bottom-left Toggleable Controls Legend
+            BuildControlsLegend(hudRt);
+
+            // CenterText — placed as SIBLING of HUD so announcements show while HUD alpha is 0 during RoundIntro
+            Text centerTxt = AddText(root, "CenterText", "ROUND 1", 112, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(centerTxt.rectTransform, 0.08f, 0.34f, 0.92f, 0.66f);
+            centerTxt.resizeTextForBestFit = true; centerTxt.resizeTextMinSize = 42; centerTxt.resizeTextMaxSize = 116;
+            AddStrongTextEffects(centerTxt, 4f, 5f);
+            centerTxt.gameObject.SetActive(false);
+
+            // FadeOverlay — always last, raycastTarget = false
+            Image fade = AddImage(root, "FadeOverlay", new Color(0f, 0f, 0f, 0f), null, false);
+            Stretch(fade.rectTransform);
+
+            // Rewire ONLY the HUD references on FightSceneManager
+            mgr.hpBarA      = hpA;
+            mgr.hpBarB      = hpB;
+            mgr.nameTagA    = nameA;
+            mgr.nameTagB    = nameB;
+            mgr.timerText   = timerTxt;
+            mgr.winsA_icons = winsA;
+            mgr.winsB_icons = winsB;
+            mgr.centerText  = centerTxt;
+            mgr.hud         = hudGroup;
+            mgr.fadeOverlay = fade;
+            EditorUtility.SetDirty(mgr);
+
+            SaveScene(scene);
+            Debug.Log("[MenuSceneBuilder] FightScene HUD rebuilt.");
+        }
+
+        static Slider BuildArcadeHealthBar(RectTransform parent, string rootName, string defaultName,
+            Color accent, Color fillColor, float x0, float x1, bool isLeft, int roundsToWin,
+            out Text nameTag, out Text winsIcons)
+        {
+            RectTransform cluster = NewRect(rootName, parent);
+            Region(cluster, x0, 0f, x1, 1f);
+
+            // Nameplate + Win Pips row
+            Image namePlate = AddFramedPanel(cluster, "NamePlate", ObsidianPanel, MutedGold, false);
+            Region(namePlate.rectTransform, 0f, 0.55f, 1f, 0.96f);
+
+            string pipsDefault = new string('○', roundsToWin);
+            if (isLeft)
+            {
+                nameTag = AddText(namePlate.rectTransform, "NameTag", defaultName, 30, accent, TextAnchor.MiddleLeft, FontStyle.Bold);
+                Region(nameTag.rectTransform, 0.03f, 0f, 0.72f, 1f);
+                winsIcons = AddText(namePlate.rectTransform, "WinsIcons", pipsDefault, 30, BrightGold, TextAnchor.MiddleRight, FontStyle.Bold);
+                Region(winsIcons.rectTransform, 0.72f, 0f, 0.97f, 1f);
+            }
+            else
+            {
+                winsIcons = AddText(namePlate.rectTransform, "WinsIcons", pipsDefault, 30, BrightGold, TextAnchor.MiddleLeft, FontStyle.Bold);
+                Region(winsIcons.rectTransform, 0.03f, 0f, 0.28f, 1f);
+                nameTag = AddText(namePlate.rectTransform, "NameTag", defaultName, 30, accent, TextAnchor.MiddleRight, FontStyle.Bold);
+                Region(nameTag.rectTransform, 0.28f, 0f, 0.97f, 1f);
+            }
+            nameTag.resizeTextForBestFit = true; nameTag.resizeTextMinSize = 18; nameTag.resizeTextMaxSize = 32;
+
+            // Metallic / Gold Framed Health Slider
+            RectTransform barRt = NewRect(isLeft ? "HPBarA" : "HPBarB", cluster);
+            Region(barRt, 0f, 0.08f, 1f, 0.50f);
+
+            Image trough = AddImage(barRt, "Background", SlotDark, sprPanel, false);
+            trough.type = Image.Type.Sliced;
+            Stretch(trough.rectTransform);
+
+            RectTransform fillArea = NewRect("Fill Area", barRt);
+            fillArea.anchorMin = Vector2.zero; fillArea.anchorMax = Vector2.one;
+            fillArea.offsetMin = new Vector2(5f, 5f); fillArea.offsetMax = new Vector2(-5f, -5f);
+
+            Image fill = AddImage(fillArea, "Fill", fillColor, sprPanel, false);
+            fill.type = Image.Type.Sliced;
+            fill.rectTransform.anchorMin = Vector2.zero; fill.rectTransform.anchorMax = Vector2.one;
+            fill.rectTransform.offsetMin = Vector2.zero; fill.rectTransform.offsetMax = Vector2.zero;
+
+            Image sheen = AddImage(fill.rectTransform, "Sheen", Color.white, sprSheen, false);
+            sheen.type = Image.Type.Sliced;
+            Stretch(sheen.rectTransform);
+
+            Image frame = AddImage(barRt, "MetallicFrame", AntiqueGold, sprFrameOrnate, false);
+            frame.type = Image.Type.Sliced;
+            Stretch(frame.rectTransform);
+
+            var slider = barRt.gameObject.AddComponent<Slider>();
+            slider.interactable = false;
+            slider.transition = Selectable.Transition.None;
+            slider.navigation = new Navigation { mode = Navigation.Mode.None };
+            slider.fillRect = fill.rectTransform;
+            slider.handleRect = null;
+            slider.direction = isLeft ? Slider.Direction.RightToLeft : Slider.Direction.LeftToRight;
+            slider.minValue = 0f; slider.maxValue = 1f; slider.value = 1f;
+            return slider;
+        }
+
+        static void BuildControlsLegend(RectTransform hudRt)
+        {
+            RectTransform legendRt = NewRect("ControlsLegend", hudRt);
+            Place(legendRt, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(28f, 22f), new Vector2(450f, 134f));
+
+            var vlg = legendRt.gameObject.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = 4f;
+            vlg.childAlignment = TextAnchor.LowerLeft;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+
+            var csf = legendRt.gameObject.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // Header toggle button
+            Button headerBtn = AddButton(legendRt, "LegendHeaderBtn", "[H] OCULTAR", 17, ButtonVariant.Compact);
+            SetLayoutElement(headerBtn.gameObject, preferredHeight: 30f);
+            Text headerTxt = headerBtn.GetComponentInChildren<Text>();
+
+            // Body panel with Portuguese moveset legend
+            Image body = AddFramedPanel(legendRt, "LegendContent", new Color(0.04f, 0.03f, 0.06f, 0.84f), MutedGold, false);
+            SetLayoutElement(body.gameObject, preferredHeight: 86f);
+            var bodyVlg = body.gameObject.AddComponent<VerticalLayoutGroup>();
+            bodyVlg.padding = new RectOffset(14, 14, 8, 8);
+            bodyVlg.spacing = 4f;
+            bodyVlg.childControlWidth = true;
+            bodyVlg.childControlHeight = true;
+            bodyVlg.childForceExpandWidth = true;
+            bodyVlg.childForceExpandHeight = true;
+
+            Text line1 = AddText(body.rectTransform, "MoveControls",
+                "A/D  Mover    ·    W / Espaço  Pular    ·    S  Agachar    ·    Shift  Defender",
+                16, Ivory, TextAnchor.MiddleLeft, FontStyle.Bold);
+            line1.resizeTextForBestFit = true; line1.resizeTextMinSize = 11; line1.resizeTextMaxSize = 16;
+
+            Text line2 = AddText(body.rectTransform, "AttackControls",
+                "J  Soco Leve    ·    K  Soco Forte    ·    L  Chute    ·    U / I  Especial",
+                16, BrightGold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            line2.resizeTextForBestFit = true; line2.resizeTextMinSize = 11; line2.resizeTextMaxSize = 16;
+
+            var toggleComp = legendRt.gameObject.AddComponent<ControlsLegendToggle>();
+            toggleComp.contentPanel   = body.gameObject;
+            toggleComp.toggleHintText = headerTxt;
+            toggleComp.toggleKey      = KeyCode.H;
+            toggleComp.startExpanded  = true;
+
+            UnityEventTools.AddPersistentListener(headerBtn.onClick, toggleComp.Toggle);
+        }
+
+        // ═════════════════════════════════════════════════════════════════════
+        //  Procedural 9-Sliced UI Sprite Assets
+        // ═════════════════════════════════════════════════════════════════════
+        static void EnsureUISprites()
+        {
+            if (!Directory.Exists(UISpritesDir)) Directory.CreateDirectory(UISpritesDir);
+
+            sprPanel       = CreateOrLoadSprite("UI_Panel.png",       64, 64, new Vector4(14, 14, 14, 14), DrawPanelPixel);
+            sprFrameOrnate = CreateOrLoadSprite("UI_FrameOrnate.png", 64, 64, new Vector4(18, 18, 18, 18), DrawFrameOrnatePixel);
+            sprPill        = CreateOrLoadSprite("UI_Pill.png",        64, 64, new Vector4(20, 20, 20, 20), DrawPillPixel);
+            sprKnob        = CreateOrLoadSprite("UI_Knob.png",        48, 48, Vector4.zero,                DrawKnobPixel);
+            sprSheen       = CreateOrLoadSprite("UI_Sheen.png",       32, 64, new Vector4(8, 8, 8, 8),     DrawSheenPixel);
+            sprDivider     = CreateOrLoadSprite("UI_Divider.png",    128, 16, Vector4.zero,                DrawDividerPixel);
+        }
+
+        static Sprite CreateOrLoadSprite(string fileName, int w, int h, Vector4 border, Func<int, int, int, int, Color32> pixelFn)
+        {
+            string path = UISpritesDir + fileName;
+            bool existed = File.Exists(path);
+
+            if (!existed)
+            {
+                var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+                var pixels = new Color32[w * h];
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                        pixels[y * w + x] = pixelFn(x, y, w, h);
+                tex.SetPixels32(pixels);
+                tex.Apply();
+                File.WriteAllBytes(path, tex.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(tex);
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            }
+
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer != null)
+            {
+                bool dirty = importer.textureType != TextureImporterType.Sprite
+                          || importer.spriteImportMode != SpriteImportMode.Single
+                          || importer.spriteBorder != border
+                          || !importer.alphaIsTransparency
+                          || importer.mipmapEnabled;
+                if (dirty)
+                {
+                    importer.textureType         = TextureImporterType.Sprite;
+                    importer.spriteImportMode    = SpriteImportMode.Single;
+                    importer.spriteBorder        = border;
+                    importer.alphaIsTransparency = true;
+                    importer.mipmapEnabled       = false;
+                    importer.wrapMode            = TextureWrapMode.Clamp;
+                    importer.filterMode          = FilterMode.Bilinear;
+                    importer.SaveAndReimport();
+                }
+            }
+
+            return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        }
+
+        static float RoundedRectSignedDist(float x, float y, float w, float h, float r)
+        {
+            float hx = w * 0.5f - r;
+            float hy = h * 0.5f - r;
+            float dx = Mathf.Max(Mathf.Abs(x - (w - 1) * 0.5f) - hx, 0f);
+            float dy = Mathf.Max(Mathf.Abs(y - (h - 1) * 0.5f) - hy, 0f);
+            return Mathf.Sqrt(dx * dx + dy * dy) - r;
+        }
+
+        static Color32 DrawPanelPixel(int x, int y, int w, int h)
+        {
+            float d = RoundedRectSignedDist(x, y, w, h, 8f);
+            float alpha = Mathf.Clamp01(0.5f - d);
+            float grad = Mathf.Lerp(0.86f, 1.0f, (float)y / (h - 1));
+            byte v = (byte)Mathf.RoundToInt(grad * 255f);
+            return new Color32(v, v, v, (byte)Mathf.RoundToInt(alpha * 255f));
+        }
+
+        static Color32 DrawPillPixel(int x, int y, int w, int h)
+        {
+            float d = RoundedRectSignedDist(x, y, w, h, 18f);
+            float alpha = Mathf.Clamp01(0.5f - d);
+            float grad = Mathf.Lerp(0.88f, 1.0f, (float)y / (h - 1));
+            byte v = (byte)Mathf.RoundToInt(grad * 255f);
+            return new Color32(v, v, v, (byte)Mathf.RoundToInt(alpha * 255f));
+        }
+
+        static Color32 DrawFrameOrnatePixel(int x, int y, int w, int h)
+        {
+            float edge = Mathf.Min(Mathf.Min(x, w - 1 - x), Mathf.Min(y, h - 1 - y));
+            float outer = (edge >= 0.5f && edge <= 2.5f) ? 1f : 0f;
+            float inner = (edge >= 5.5f && edge <= 6.8f) ? 0.72f : 0f;
+
+            // Corner filigree L-accents safely inside 18px 9-slice margin
+            int cx = Mathf.Min(x, w - 1 - x);
+            int cy = Mathf.Min(y, h - 1 - y);
+            bool cornerBracket = (cx <= 13 && cy <= 13) && (cx <= 4 || cy <= 4) && (cx >= 1 && cy >= 1);
+            bool cornerGem     = (cx + cy >= 8 && cx + cy <= 12 && cx >= 3 && cy >= 3 && cx <= 8 && cy <= 8);
+
+            float a = Mathf.Max(Mathf.Max(outer, inner), cornerBracket ? 0.9f : (cornerGem ? 1f : 0f));
+            byte c = (byte)(cornerGem || outer > 0.5f ? 255 : 225);
+            return new Color32(c, c, c, (byte)Mathf.RoundToInt(Mathf.Clamp01(a) * 255f));
+        }
+
+        static Color32 DrawKnobPixel(int x, int y, int w, int h)
+        {
+            float dx = x - (w - 1) * 0.5f;
+            float dy = y - (h - 1) * 0.5f;
+            float r  = Mathf.Sqrt(dx * dx + dy * dy);
+            float maxR = w * 0.5f - 2f;
+            float alpha = Mathf.Clamp01(maxR - r + 0.8f);
+            float shade = (r > maxR - 3.2f) ? 0.55f : Mathf.Lerp(0.82f, 1.0f, (dy + maxR) / (2f * maxR));
+            byte v = (byte)Mathf.RoundToInt(shade * 255f);
+            return new Color32(v, v, v, (byte)Mathf.RoundToInt(alpha * 255f));
+        }
+
+        static Color32 DrawSheenPixel(int x, int y, int w, int h)
+        {
+            float ny = (float)y / (h - 1);
+            float a = ny > 0.5f ? Mathf.Lerp(0.02f, 0.24f, (ny - 0.5f) * 2f) : 0f;
+            return new Color32(255, 255, 255, (byte)Mathf.RoundToInt(a * 255f));
+        }
+
+        static Color32 DrawDividerPixel(int x, int y, int w, int h)
+        {
+            float nx = Mathf.Abs((x - (w - 1) * 0.5f) / (w * 0.5f));
+            float ny = Mathf.Abs(y - (h - 1) * 0.5f);
+            float lineAlpha = ny <= 1.2f ? Mathf.Clamp01(1f - nx) : 0f;
+
+            // Center diamond ornament
+            float dx = Mathf.Abs(x - (w - 1) * 0.5f);
+            float dy = Mathf.Abs(y - (h - 1) * 0.5f);
+            float diamond = Mathf.Clamp01(1f - (dx + dy) / 6.5f);
+            float a = Mathf.Max(lineAlpha * 0.85f, diamond);
+            return new Color32(255, 255, 255, (byte)Mathf.RoundToInt(a * 255f));
+        }
+
+        // ═════════════════════════════════════════════════════════════════════
+        //  Scene Helpers
+        // ═════════════════════════════════════════════════════════════════════
         static Scene OpenScene(string sceneName)
         {
             return EditorSceneManager.OpenScene(ScenesDir + sceneName + ".unity", OpenSceneMode.Single);
@@ -463,13 +1072,13 @@ namespace EcclesiaFighters.EditorTools
         {
             foreach (GameObject go in scene.GetRootGameObjects())
                 if (go.name == "Canvas" || go.name == "EventSystem" || go.name == "BGM")
-                    Object.DestroyImmediate(go);
+                    UnityEngine.Object.DestroyImmediate(go);
         }
 
         static void SetupCamera()
         {
             Camera cam = Camera.main;
-            if (cam == null) cam = Object.FindObjectOfType<Camera>();
+            if (cam == null) cam = UnityEngine.Object.FindObjectOfType<Camera>();
             if (cam == null)
             {
                 var go = new GameObject("Camera");
@@ -483,7 +1092,7 @@ namespace EcclesiaFighters.EditorTools
 
         static T GetOrCreateManager<T>(string goName) where T : MonoBehaviour
         {
-            T m = Object.FindObjectOfType<T>();
+            T m = UnityEngine.Object.FindObjectOfType<T>();
             if (m == null)
             {
                 var go = new GameObject(goName);
@@ -532,9 +1141,9 @@ namespace EcclesiaFighters.EditorTools
             return c;
         }
 
-        // ═════════════════════════════════════════════════════
-        //  UI factory helpers
-        // ═════════════════════════════════════════════════════
+        // ═════════════════════════════════════════════════════════════════════
+        //  UI Factory Helpers
+        // ═════════════════════════════════════════════════════════════════════
         static RectTransform NewRect(string name, Transform parent)
         {
             var go = new GameObject(name, typeof(RectTransform));
@@ -549,7 +1158,6 @@ namespace EcclesiaFighters.EditorTools
             rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero;
         }
 
-        /// <summary>Anchors the rect to a normalised region of its parent (zero offsets).</summary>
         static void Region(RectTransform rt, float x0, float y0, float x1, float y1)
         {
             rt.anchorMin = new Vector2(x0, y0); rt.anchorMax = new Vector2(x1, y1);
@@ -562,6 +1170,17 @@ namespace EcclesiaFighters.EditorTools
             rt.anchoredPosition = pos; rt.sizeDelta = size;
         }
 
+        static LayoutElement SetLayoutElement(GameObject go, float preferredWidth = -1f, float preferredHeight = -1f,
+            float flexibleWidth = -1f, float flexibleHeight = -1f)
+        {
+            var le = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
+            if (preferredWidth  >= 0f) le.preferredWidth  = preferredWidth;
+            if (preferredHeight >= 0f) le.preferredHeight = preferredHeight;
+            if (flexibleWidth   >= 0f) le.flexibleWidth   = flexibleWidth;
+            if (flexibleHeight  >= 0f) le.flexibleHeight  = flexibleHeight;
+            return le;
+        }
+
         static Image AddImage(RectTransform parent, string name, Color color, Sprite sprite = null, bool raycast = true)
         {
             RectTransform rt = NewRect(name, parent);
@@ -570,6 +1189,29 @@ namespace EcclesiaFighters.EditorTools
             img.color = color;
             img.raycastTarget = raycast;
             return img;
+        }
+
+        static Image AddFramedPanel(RectTransform parent, string name, Color fillColor, Color frameColor, bool raycast)
+        {
+            Image panel = AddImage(parent, name, fillColor, sprPanel, raycast);
+            panel.type = Image.Type.Sliced;
+
+            Image border = AddImage(panel.rectTransform, "Frame", frameColor, sprFrameOrnate, false);
+            border.type = Image.Type.Sliced;
+            Stretch(border.rectTransform);
+            return panel;
+        }
+
+        static void AddDivider(RectTransform parent, string name, Color tint, float x0, float y0, float x1, float y1)
+        {
+            Image div = AddImage(parent, name, tint, sprDivider, false);
+            Region(div.rectTransform, x0, y0, x1, y1);
+        }
+
+        static void AddLayoutDivider(RectTransform parent, string name, Color tint)
+        {
+            Image div = AddImage(parent, name, tint, sprDivider, false);
+            SetLayoutElement(div.gameObject, preferredHeight: 12f);
         }
 
         static Text AddText(RectTransform parent, string name, string text, int size, Color color,
@@ -586,47 +1228,117 @@ namespace EcclesiaFighters.EditorTools
             t.horizontalOverflow = HorizontalWrapMode.Wrap;
             t.verticalOverflow = VerticalWrapMode.Overflow;
             t.raycastTarget = false;
+            AddStrongTextEffects(t, 1.3f, 2f);
             return t;
         }
 
-        static void AddShadow(Graphic g)
+        static void AddShadow(Graphic g, float dist = 3f)
         {
-            var s = g.gameObject.AddComponent<Shadow>();
-            s.effectColor = new Color(0f, 0f, 0f, 0.8f);
-            s.effectDistance = new Vector2(3f, -3f);
+            var s = g.GetComponent<Shadow>() ?? g.gameObject.AddComponent<Shadow>();
+            s.effectColor = InkDark;
+            s.effectDistance = new Vector2(dist, -dist);
         }
 
         static void AddOutline(Graphic g, Color color, float distance)
         {
-            var o = g.gameObject.AddComponent<Outline>();
+            var o = g.GetComponent<Outline>() ?? g.gameObject.AddComponent<Outline>();
             o.effectColor = color;
             o.effectDistance = new Vector2(distance, -distance);
         }
 
-        static Button AddButton(RectTransform parent, string name, string label, int fontSize)
+        static void AddStrongTextEffects(Text t, float outlineDist, float shadowDist)
         {
-            Image img = AddImage(parent, name, ButtonBg);
+            AddOutline(t, InkDark, outlineDist);
+            AddShadow(t, shadowDist);
+        }
+
+        static Button AddButton(RectTransform parent, string name, string label, int fontSize, ButtonVariant variant = ButtonVariant.Default)
+        {
+            Color normalBg, hoverBg, pressedBg, selectedBg, normalFrame, hoverFrame, selectedFrame, normalTxt, hoverTxt, selectedTxt;
+
+            switch (variant)
+            {
+                case ButtonVariant.PrimaryCrimson:
+                    normalBg      = CrimsonDark;
+                    hoverBg       = Crimson;
+                    pressedBg     = new Color(0.24f, 0.04f, 0.07f, 1f);
+                    selectedBg    = Crimson;
+                    normalFrame   = AntiqueGold;
+                    hoverFrame    = BrightGold;
+                    selectedFrame = BrightGold;
+                    normalTxt     = Ivory;
+                    hoverTxt      = BrightGold;
+                    selectedTxt   = BrightGold;
+                    break;
+
+                case ButtonVariant.SecondaryDanger:
+                    normalBg      = new Color(0.11f, 0.04f, 0.06f, 0.94f);
+                    hoverBg       = new Color(0.24f, 0.06f, 0.09f, 0.98f);
+                    pressedBg     = new Color(0.16f, 0.03f, 0.05f, 1f);
+                    selectedBg    = new Color(0.24f, 0.06f, 0.09f, 0.98f);
+                    normalFrame   = MutedGold;
+                    hoverFrame    = IdeoCrimson;
+                    selectedFrame = BrightGold;
+                    normalTxt     = IvoryMuted;
+                    hoverTxt      = Ivory;
+                    selectedTxt   = BrightGold;
+                    break;
+
+                default:
+                    normalBg      = ObsidianPanel;
+                    hoverBg       = new Color(0.16f, 0.11f, 0.21f, 0.98f);
+                    pressedBg     = BurgundyPanel;
+                    selectedBg    = new Color(0.22f, 0.15f, 0.09f, 0.98f);
+                    normalFrame   = MutedGold;
+                    hoverFrame    = BrightGold;
+                    selectedFrame = BrightGold;
+                    normalTxt     = Ivory;
+                    hoverTxt      = BrightGold;
+                    selectedTxt   = BrightGold;
+                    break;
+            }
+
+            Image img = AddImage(parent, name, normalBg, sprPanel, true);
+            img.type = Image.Type.Sliced;
+
+            Image sheen = AddImage(img.rectTransform, "Sheen", Color.white, sprSheen, false);
+            sheen.type = Image.Type.Sliced;
+            Stretch(sheen.rectTransform);
+
+            Image frame = AddImage(img.rectTransform, "Frame", normalFrame, sprFrameOrnate, false);
+            frame.type = Image.Type.Sliced;
+            Stretch(frame.rectTransform);
+
             var btn = img.gameObject.AddComponent<Button>();
             btn.targetGraphic = img;
+            btn.transition = Selectable.Transition.None; // UIButtonJuice handles scale/frame/tint smoothly
             btn.navigation = new Navigation { mode = Navigation.Mode.None };
-            var cb = btn.colors;
-            cb.normalColor      = Color.white;
-            cb.highlightedColor = new Color(1f, 0.92f, 0.65f, 1f);
-            cb.pressedColor     = new Color(0.75f, 0.60f, 0.25f, 1f);
-            cb.selectedColor    = Color.white;
-            cb.disabledColor    = new Color(0.45f, 0.45f, 0.45f, 0.6f);
-            cb.colorMultiplier  = 1f;
-            cb.fadeDuration     = 0.08f;
-            btn.colors = cb;
-            AddOutline(img, Gold, 2f);
 
-            Text t = AddText(img.rectTransform, "Label", label, fontSize, Parchment, TextAnchor.MiddleCenter, FontStyle.Bold);
-            t.resizeTextForBestFit = true; t.resizeTextMinSize = 12; t.resizeTextMaxSize = fontSize;
-            Stretch(t.rectTransform);
+            Text t = AddText(img.rectTransform, "Label", label, fontSize, normalTxt, TextAnchor.MiddleCenter, FontStyle.Bold);
+            t.resizeTextForBestFit = true;
+            t.resizeTextMinSize = 12;
+            t.resizeTextMaxSize = fontSize;
+            Region(t.rectTransform, 0.05f, 0.06f, 0.95f, 0.94f);
+
+            var juice = img.gameObject.AddComponent<UIButtonJuice>();
+            juice.targetBackground = img;
+            juice.targetFrame      = frame;
+            juice.targetLabel      = t;
+            juice.normalBg         = normalBg;
+            juice.hoverBg          = hoverBg;
+            juice.pressedBg        = pressedBg;
+            juice.selectedBg       = selectedBg;
+            juice.normalFrame      = normalFrame;
+            juice.hoverFrame       = hoverFrame;
+            juice.selectedFrame    = selectedFrame;
+            juice.normalText       = normalTxt;
+            juice.hoverText        = hoverTxt;
+            juice.selectedText     = selectedTxt;
+            juice.hoverScale       = variant == ButtonVariant.Compact ? 1.025f : 1.035f;
+            juice.selectedScale    = variant == ButtonVariant.Compact ? 1.025f : 1.035f;
             return btn;
         }
 
-        /// <summary>Mouse hover → TitleScreenManager.UpdateSel(index), so mouse and keyboard highlight agree.</summary>
         static void AddHoverSelect(Button btn, TitleScreenManager mgr, int index)
         {
             var trigger = btn.gameObject.AddComponent<EventTrigger>();
@@ -637,21 +1349,23 @@ namespace EcclesiaFighters.EditorTools
 
         static Toggle AddToggle(RectTransform parent, string name, string label)
         {
-            RectTransform root = NewRect(name, parent);
-            var hit = root.gameObject.AddComponent<Image>();      // invisible hit area so the whole row is clickable
-            hit.color = new Color(0f, 0f, 0f, 0f);
+            Image card = AddFramedPanel(parent, name, SlotDark, MutedGold, true);
 
-            Image box = AddImage(root, "Background", ButtonBg);
-            Place(box.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), Vector2.zero, new Vector2(44f, 44f));
-            AddOutline(box, Gold, 2f);
-            Image check = AddImage(box.rectTransform, "Checkmark", Gold, null, false);
-            check.rectTransform.anchorMin = Vector2.zero; check.rectTransform.anchorMax = Vector2.one;
-            check.rectTransform.offsetMin = new Vector2(9f, 9f); check.rectTransform.offsetMax = new Vector2(-9f, -9f);
+            Image box = AddImage(card.rectTransform, "Checkbox", ObsidianPanel, sprPanel, false);
+            box.type = Image.Type.Sliced;
+            Place(box.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(18f, 0f), new Vector2(34f, 34f));
+            Image boxFrame = AddImage(box.rectTransform, "Frame", AntiqueGold, sprFrameOrnate, false);
+            boxFrame.type = Image.Type.Sliced;
+            Stretch(boxFrame.rectTransform);
 
-            Text lbl = AddText(root, "Label", label, 28, Parchment, TextAnchor.MiddleLeft);
-            Region(lbl.rectTransform, 0.14f, 0f, 1f, 1f);
+            Image check = AddImage(box.rectTransform, "Checkmark", BrightGold, sprPanel, false);
+            check.type = Image.Type.Sliced;
+            Region(check.rectTransform, 0.22f, 0.22f, 0.78f, 0.78f);
 
-            var tg = root.gameObject.AddComponent<Toggle>();
+            Text lbl = AddText(card.rectTransform, "Label", label, 22, Ivory, TextAnchor.MiddleLeft, FontStyle.Bold);
+            Region(lbl.rectTransform, 0.24f, 0.05f, 0.96f, 0.95f);
+
+            var tg = card.gameObject.AddComponent<Toggle>();
             tg.targetGraphic = box;
             tg.graphic = check;
             tg.isOn = true;
@@ -663,24 +1377,30 @@ namespace EcclesiaFighters.EditorTools
         {
             RectTransform root = NewRect(name, parent);
 
-            Image bg = AddImage(root, "Background", SliderBg);
-            bg.rectTransform.anchorMin = new Vector2(0f, 0.25f); bg.rectTransform.anchorMax = new Vector2(1f, 0.75f);
+            Image bg = AddImage(root, "Background", new Color(0.11f, 0.09f, 0.15f, 1f), sprPill, false);
+            bg.type = Image.Type.Sliced;
+            bg.rectTransform.anchorMin = new Vector2(0f, 0.28f); bg.rectTransform.anchorMax = new Vector2(1f, 0.72f);
             bg.rectTransform.offsetMin = Vector2.zero; bg.rectTransform.offsetMax = Vector2.zero;
 
             RectTransform fillArea = NewRect("Fill Area", root);
-            fillArea.anchorMin = new Vector2(0f, 0.25f); fillArea.anchorMax = new Vector2(1f, 0.75f);
-            fillArea.offsetMin = new Vector2(5f, 0f);    fillArea.offsetMax = new Vector2(-15f, 0f);
-            Image fill = AddImage(fillArea, "Fill", Gold, null, false);
+            fillArea.anchorMin = new Vector2(0f, 0.28f); fillArea.anchorMax = new Vector2(1f, 0.72f);
+            fillArea.offsetMin = new Vector2(4f, 2f);    fillArea.offsetMax = new Vector2(-10f, -2f);
+
+            Image fill = AddImage(fillArea, "Fill", AntiqueGold, sprPill, false);
+            fill.type = Image.Type.Sliced;
             fill.rectTransform.anchorMin = Vector2.zero; fill.rectTransform.anchorMax = new Vector2(0f, 1f);
             fill.rectTransform.sizeDelta = new Vector2(10f, 0f);
 
             RectTransform handleArea = NewRect("Handle Slide Area", root);
             handleArea.anchorMin = Vector2.zero; handleArea.anchorMax = Vector2.one;
-            handleArea.offsetMin = new Vector2(10f, 0f); handleArea.offsetMax = new Vector2(-10f, 0f);
-            Image handle = AddImage(handleArea, "Handle", Parchment);
-            handle.rectTransform.anchorMin = Vector2.zero; handle.rectTransform.anchorMax = new Vector2(0f, 1f);
-            handle.rectTransform.sizeDelta = new Vector2(22f, 0f);
-            AddOutline(handle, Gold, 2f);
+            handleArea.offsetMin = new Vector2(14f, 0f); handleArea.offsetMax = new Vector2(-14f, 0f);
+
+            Image handle = AddImage(handleArea, "Handle", BrightGold, sprKnob, true);
+            handle.preserveAspect = true;
+            handle.rectTransform.anchorMin = new Vector2(0f, 0.5f);
+            handle.rectTransform.anchorMax = new Vector2(0f, 0.5f);
+            handle.rectTransform.pivot     = new Vector2(0.5f, 0.5f);
+            handle.rectTransform.sizeDelta = new Vector2(28f, 28f);
 
             var slider = root.gameObject.AddComponent<Slider>();
             slider.fillRect = fill.rectTransform;

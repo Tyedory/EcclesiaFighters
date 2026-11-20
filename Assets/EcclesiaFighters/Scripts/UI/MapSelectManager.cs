@@ -70,9 +70,21 @@ namespace EcclesiaFighters
 
         void HighlightCard(Image on, Image off)
         {
-            // Tint selected card bright, dim the other
-            if (on)  on.color  = Color.white;
-            if (off) off.color = new Color(0.5f, 0.5f, 0.5f);
+            // Tint selected card bright, dim the other, and sync ornate frame glow
+            if (on)
+            {
+                on.color = Color.white;
+                on.GetComponent<UIButtonJuice>()?.SetSelected(true);
+                var o = on.GetComponent<Outline>();
+                if (o) { o.effectColor = selectedBorder; o.effectDistance = new Vector2(4f, -4f); }
+            }
+            if (off)
+            {
+                off.color = new Color(0.48f, 0.45f, 0.50f);
+                off.GetComponent<UIButtonJuice>()?.SetSelected(false);
+                var o = off.GetComponent<Outline>();
+                if (o) { o.effectColor = normalBorder; o.effectDistance = new Vector2(2f, -2f); }
+            }
         }
 
         public void OnConfirm()

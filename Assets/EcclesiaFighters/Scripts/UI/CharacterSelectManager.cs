@@ -29,6 +29,8 @@ namespace EcclesiaFighters
         [Header("Confirm")]
         public Text  confirmText;
         public TitleScreenManager titleManager;   // drag the TitleScreenManager here
+        [HideInInspector] public Button[] buttonsA;
+        [HideInInspector] public Button[] buttonsB;
 
         [Header("Scene Flow (used when titleManager is not in this scene)")]
         public string nextScene = "MapSelect";
@@ -47,8 +49,25 @@ namespace EcclesiaFighters
             }
         }
 
-        public void SelectA(int idx) { selectedA = idx; Apply(idx, portraitA, nameA, descA, new Color(0.5f,0.8f,1f)); }
-        public void SelectB(int idx) { selectedB = idx; Apply(idx, portraitB, nameB, descB, new Color(1f,0.5f,0.5f)); }
+        public void SelectA(int idx)
+        {
+            selectedA = idx;
+            Apply(idx, portraitA, nameA, descA, new Color(0.56f, 0.84f, 1f));
+            UpdateRosterHighlight(buttonsA, idx);
+        }
+        public void SelectB(int idx)
+        {
+            selectedB = idx;
+            Apply(idx, portraitB, nameB, descB, new Color(0.95f, 0.38f, 0.40f));
+            UpdateRosterHighlight(buttonsB, idx);
+        }
+
+        void UpdateRosterHighlight(Button[] btns, int activeIdx)
+        {
+            if (btns == null) return;
+            for (int i = 0; i < btns.Length; i++)
+                if (btns[i]) btns[i].GetComponent<UIButtonJuice>()?.SetSelected(i == activeIdx);
+        }
 
         void Apply(int idx, Image img, Text nm, Text dsc, Color col)
         {

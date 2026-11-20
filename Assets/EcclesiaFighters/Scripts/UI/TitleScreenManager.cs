@@ -32,8 +32,8 @@ namespace EcclesiaFighters
         public string mapSelectScene  = "MapSelect";
 
         private int selectedIndex = 0;
-        private readonly Color normalColor   = new Color(0.94f, 0.91f, 0.85f);
-        private readonly Color selectedColor = new Color(0.99f, 0.78f, 0.20f);
+        private readonly Color normalColor   = new Color(0.96f, 0.93f, 0.86f);
+        private readonly Color selectedColor = new Color(1.00f, 0.84f, 0.30f);
 
         void Start()
         {
@@ -87,6 +87,8 @@ namespace EcclesiaFighters
             {
                 var txt = menuButtons[i].GetComponentInChildren<Text>();
                 if (txt) txt.color = i == idx ? selectedColor : normalColor;
+                var juice = menuButtons[i].GetComponent<UIButtonJuice>();
+                if (juice) juice.SetSelected(i == idx);
             }
         }
 
