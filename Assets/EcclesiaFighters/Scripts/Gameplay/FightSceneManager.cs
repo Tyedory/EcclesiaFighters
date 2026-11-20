@@ -24,9 +24,13 @@ namespace EcclesiaFighters
         public Sprite[] mapBackgrounds;
         public SpriteRenderer backgroundRenderer;
 
-        [Header("Camera Positions")]
+        [Header("Camera Positions (Legacy Fallback)")]
         public Transform camExterior;
         public Transform camInterior;
+
+        [Header("3D Church Stage & Dynamic Camera")]
+        public ChurchStageController stageController;
+        public FighterCamera         fighterCamera;
 
         // ── HUD ────────────────────────────────────────────────
         [Header("HUD")]
@@ -57,17 +61,45 @@ namespace EcclesiaFighters
 
         IEnumerator Setup()
         {
-            // Map
+            // Map (0 = Nave Central / Exterior key, 1 = Altar Sagrado / Interior key)
             string map = PlayerPrefs.GetString("SelectedMap", "Exterior");
-            bool interior = map == "Interior";
-            if (backgroundRenderer) backgroundRenderer.sprite = interior ? mapBackgrounds[1] : mapBackgrounds[0];
-            var camTarget = interior ? camInterior : camExterior;
-            if (camTarget) Camera.main.transform.SetPositionAndRotation(camTarget.position, camTarget.rotation);
+            int stageIdx = (map == "Interior" || map == "1") ? 1 : 0;
+
+            if (!stageController)
+                stageController = FindObjectOfType<ChurchStageController>();
+
+            if (!fighterCamera && Camera.main)
+                fighterCamera = Camera.main.GetComponent<FighterCamera>() ?? Camera.main.gameObject.AddComponent<FighterCamera>();
+
+            if (stageController)
+            {
+                if (!stageController.fighterCamera)            stageController.fighterCamera            = fighterCamera;
+                if (!stageController.legacyBackgroundRenderer) stageController.legacyBackgroundRenderer = backgroundRenderer;
+                stageController.ApplyPreset(stageIdx);
+                if (stageController.spawnA) spawnA = stageController.spawnA;
+                if (stageController.spawnB) spawnB = stageController.spawnB;
+            }
+            else
+            {
+                bool interior = stageIdx == 1;
+                if (backgroundRenderer && mapBackgrounds != null && mapBackgrounds.Length > stageIdx)
+                    backgroundRenderer.sprite = interior ? mapBackgrounds[1] : mapBackgrounds[0];
+                var camTarget = interior ? camInterior : camExterior;
+                if (camTarget && Camera.main) Camera.main.transform.SetPositionAndRotation(camTarget.position, camTarget.rotation);
+            }
 
             // Spawn
             int idxA = PlayerPrefs.GetInt("SelectedCharA", 0);
             int idxB = PlayerPrefs.GetInt("SelectedCharB", 1);
             yield return SpawnFighters(idxA, idxB);
+
+            if (stageController)
+            {
+                stageController.SyncFighterBounds(ctrlA);
+                stageController.SyncFighterBounds(ctrlB);
+            }
+            if (fighterCamera && objA && objB)
+                fighterCamera.SetTargets(objA.transform, objB.transform, snapImmediate: true);
 
             // Intro
             yield return RoundIntro();
@@ -152,6 +184,7 @@ namespace EcclesiaFighters
                 round++;
                 ctrlA?.ResetFighter(); objA.transform.position = spawnA.position; objA.transform.rotation = Quaternion.Euler(0, 90,0);
                 ctrlB?.ResetFighter(); objB.transform.position = spawnB.position; objB.transform.rotation = Quaternion.Euler(0,-90,0);
+                fighterCamera?.SnapToTargets();
                 yield return RoundIntro();
                 StartRound();
             }

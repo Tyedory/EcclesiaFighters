@@ -82,11 +82,20 @@ namespace EcclesiaFighters.EditorTools
         public static void MenuFightHud()
         {
             if (!EditorUtility.DisplayDialog("Rebuild Fight HUD",
-                    "This restyles the FightScene HUD Canvas while preserving all FightSceneManager gameplay, camera, spawn, and stage references.\nContinue?",
+                    "This restyles the FightScene HUD Canvas and sets up the 3D Church Fight Arena while preserving FightSceneManager gameplay, spawn, and stage references.\nContinue?",
                     "Rebuild HUD", "Cancel")) return;
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             RebuildFightHudBatch();
-            EditorUtility.DisplayDialog("Rebuild Fight HUD", "FightScene HUD was rebuilt and saved.", "OK");
+            EditorUtility.DisplayDialog("Rebuild Fight HUD", "FightScene HUD & 3D Church Arena were rebuilt and saved.", "OK");
+        }
+
+        [MenuItem("EcclesiaFighters/Menus/Setup 3D Church Fight Arena")]
+        public static void MenuSetupFightArena3D()
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            SetupFightArena3DBatch();
+            EditorUtility.DisplayDialog("Setup 3D Church Fight Arena",
+                "ChurchStageController, FighterCamera, igreja de novo 8 (2).fbx, and invisible Floor/Wall colliders are ready in FightScene.", "OK");
         }
 
         /// <summary>No dialogs: usable from -executeMethod.</summary>
@@ -106,7 +115,23 @@ namespace EcclesiaFighters.EditorTools
             EnsureUISprites();
             BuildFightHud();
             AssetDatabase.SaveAssets();
-            Debug.Log("[MenuSceneBuilder] FightScene HUD rebuilt.");
+            Debug.Log("[MenuSceneBuilder] FightScene HUD & 3D Church Arena rebuilt.");
+        }
+
+        /// <summary>No dialogs: usable from -executeMethod.</summary>
+        public static void SetupFightArena3DBatch()
+        {
+            Scene scene = OpenScene("FightScene");
+            var mgr = UnityEngine.Object.FindObjectOfType<FightSceneManager>();
+            if (!mgr)
+            {
+                Debug.LogError("[MenuSceneBuilder] FightSceneManager not found in FightScene.");
+                return;
+            }
+            SetupFightArena3D(mgr);
+            SaveScene(scene);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[MenuSceneBuilder] FightScene 3D Church Arena configured.");
         }
 
         // ═════════════════════════════════════════════════════════════════════
@@ -809,10 +834,65 @@ namespace EcclesiaFighters.EditorTools
             mgr.centerText  = centerTxt;
             mgr.hud         = hudGroup;
             mgr.fadeOverlay = fade;
+
+            SetupFightArena3D(mgr);
             EditorUtility.SetDirty(mgr);
 
             SaveScene(scene);
             Debug.Log("[MenuSceneBuilder] FightScene HUD rebuilt.");
+        }
+
+        static void SetupFightArena3D(FightSceneManager mgr)
+        {
+            // Hide legacy flat 2D background plane
+            SpriteRenderer legacyBg = mgr.backgroundRenderer;
+            if (!legacyBg)
+            {
+                GameObject bgGo = GameObject.Find("Background");
+                if (bgGo) legacyBg = bgGo.GetComponent<SpriteRenderer>();
+            }
+            if (legacyBg) legacyBg.gameObject.SetActive(false);
+
+            // Configure main camera with FighterCamera
+            Camera cam = Camera.main ?? UnityEngine.Object.FindObjectOfType<Camera>();
+            if (!cam)
+            {
+                var camGo = new GameObject("Camera") { tag = "MainCamera" };
+                cam = camGo.AddComponent<Camera>();
+                camGo.AddComponent<AudioListener>();
+            }
+            cam.clearFlags      = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(0.04f, 0.03f, 0.06f, 1f);
+            cam.nearClipPlane   = 0.2f;
+
+            FighterCamera fcam = cam.GetComponent<FighterCamera>() ?? cam.gameObject.AddComponent<FighterCamera>();
+
+            // Create / reuse ChurchStageController
+            ChurchStageController stageCtrl = mgr.stageController ?? UnityEngine.Object.FindObjectOfType<ChurchStageController>();
+            if (!stageCtrl)
+            {
+                var stageGo = new GameObject("ChurchStageController");
+                stageCtrl = stageGo.AddComponent<ChurchStageController>();
+            }
+
+            stageCtrl.churchModelAsset         = AssetDatabase.LoadAssetAtPath<GameObject>(ChurchStageController.DefaultChurchAssetPath);
+            stageCtrl.legacyBackgroundRenderer = legacyBg;
+            stageCtrl.fighterCamera            = fcam;
+            if (mgr.spawnA) stageCtrl.spawnA   = mgr.spawnA;
+            if (mgr.spawnB) stageCtrl.spawnB   = mgr.spawnB;
+
+            stageCtrl.InitializeDefaultPresets(force: false);
+            stageCtrl.EnsureArenaObjects();
+            stageCtrl.ApplyPreset(stageCtrl.activePresetIndex);
+
+            mgr.stageController = stageCtrl;
+            mgr.fighterCamera   = fcam;
+            if (stageCtrl.spawnA) mgr.spawnA = stageCtrl.spawnA;
+            if (stageCtrl.spawnB) mgr.spawnB = stageCtrl.spawnB;
+
+            EditorUtility.SetDirty(fcam);
+            EditorUtility.SetDirty(stageCtrl);
+            EditorUtility.SetDirty(mgr);
         }
 
         static Slider BuildArcadeHealthBar(RectTransform parent, string rootName, string defaultName,
