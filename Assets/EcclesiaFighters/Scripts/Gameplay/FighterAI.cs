@@ -4,22 +4,14 @@ using UnityEngine;
 namespace EcclesiaFighters
 {
     /// <summary>
-    /// FSM AI para Karl Marx (CPU). Attach ao prefab junto com FighterController (isPlayer=false).
+    /// Upgraded FSM AI for Karl Marx (CPU). Attach alongside FighterController (isPlayer = false).
     ///
-    /// Estados:
-    ///   Idle      – pausa curta antes de decidir
-    ///   Approach  – anda em direção ao jogador
-    ///   Retreat   – recua quando HP < 25%
-    ///   Punch     – soco (distância próxima)
-    ///   Kick      – chute (distância próxima)
-    ///   Special   – golpe especial (FOICE+MARTELO — usada em qualquer distância)
-    ///   Block     – bloqueia por instante
-    ///   Jump      – salta para fechar distância
-    ///
-    /// Dificuldades (Inspector):
-    ///   0 = Fácil    delay 0.8s | erra 30% | especial toda 8s
-    ///   1 = Médio    delay 0.4s | erra 12% | especial toda 4s
-    ///   2 = Difícil  delay 0.15s| erra 4%  | especial assim que disponível
+    /// Behavior:
+    /// - Actively closes distance when out of melee range.
+    /// - Mixes Light Punch, Heavy Punch, Kick, and occasional crouch-attacks at melee range.
+    /// - Reactively blocks or crouches against incoming melee attacks / projectiles.
+    /// - Uses Special Attack mostly at mid-to-long range with a cooldown gate (no nonstop spam).
+    /// - Survives round resets cleanly (stays active across best-of-3 rounds).
     /// </summary>
     [RequireComponent(typeof(FighterController))]
     public class FighterAI : MonoBehaviour
@@ -30,46 +22,53 @@ namespace EcclesiaFighters
         public Difficulty difficulty = Difficulty.Medio;
 
         [Header("Distâncias")]
-        public float closeRange  = 2.0f;   // soco/chute
-        public float midRange    = 5.5f;   // pode usar especial
-        public float retreatHP   = 0.25f;  // abaixo disso = Retreat
+        public float closeRange = 1.95f;
+        public float midRange   = 5.5f;
+        public float retreatHP  = 0.25f;
 
-        // ── tunáveis por dificuldade ──────────────────────────
-        float reactionDelay;   // delay entre decisões (ms)
-        float missChance;      // probabilidade de errar o ataque
-        float specialCooldownBonus; // tempo extra de cooldown (0 = usa assim que disponível)
+        // Tunables per difficulty
+        float reactionDelay;
+        float missChance;
+        float blockReactChance;
+        float crouchReactChance;
+        float comboChance;
+        float specialMinInterval;
 
         FighterController self;
-        float specialTimer = 0f;  // contador local para forçar uso de especial
+        FighterController opponentCtrl;
+        Coroutine         thinkRoutine;
 
-        enum State { Idle, Approach, Retreat, Punch, Kick, Special, Block, Jump }
+        float lastSpecialTime  = -10f;
+        float defenseCheckCd;
+
+        enum State { Idle, Approach, Retreat, LightPunch, HeavyPunch, Kick, CrouchPoke, Special, Block, Crouch, Jump }
         State state = State.Idle;
 
-        // ── ciclo de especial garantido ──────────────────────
-        // Marx GARANTE usar o especial periodicamente independente do estado
-        float specialForceInterval;  // a cada N segundos força o especial
-
-        void Awake()  { self = GetComponent<FighterController>(); }
-
-        // ── Facing ───────────────────────────────────────────
-        // Marx compares his X to the opponent's X every frame and turns to face them.
-        // FighterController.FaceDirection() performs the actual flip: it mirrors
-        // transform.localScale.x when facingMode = FlipScaleX (flat sprites), or rotates
-        // the root ±90° around Y when facingMode = RotateY (3D models, the default).
-        void Update()
+        void Awake()
         {
-            if (!self || self.IsDead || !self.opponent) return;
-
-            float diff = self.opponent.position.x - transform.position.x;
-            if (Mathf.Abs(diff) < 0.01f) return;           // overlapping: keep current facing
-            self.FaceDirection(diff > 0f ? 1 : -1);
+            self = GetComponent<FighterController>();
         }
 
         void OnEnable()
         {
             ConfigDifficulty();
-            StartCoroutine(Think());
-            StartCoroutine(SpecialForcer()); // loop separado para garantir uso do especial
+            if (thinkRoutine != null) StopCoroutine(thinkRoutine);
+            thinkRoutine = StartCoroutine(Think());
+        }
+
+        void OnDisable()
+        {
+            if (thinkRoutine != null) { StopCoroutine(thinkRoutine); thinkRoutine = null; }
+        }
+
+        void Update()
+        {
+            if (defenseCheckCd > 0f) defenseCheckCd -= Time.deltaTime;
+            if (!self || self.IsDead || !self.opponent) return;
+
+            float diff = self.opponent.position.x - transform.position.x;
+            if (Mathf.Abs(diff) >= 0.05f && !self.IsAttacking && !self.IsInHitstun)
+                self.FaceDirection(diff > 0f ? 1 : -1);
         }
 
         void ConfigDifficulty()
@@ -77,175 +76,320 @@ namespace EcclesiaFighters
             switch (difficulty)
             {
                 case Difficulty.Facil:
-                    reactionDelay = 0.80f;
-                    missChance    = 0.30f;
-                    specialForceInterval = 8f;
+                    reactionDelay      = 0.55f;
+                    missChance         = 0.28f;
+                    blockReactChance   = 0.20f;
+                    crouchReactChance  = 0.14f;
+                    comboChance        = 0.15f;
+                    specialMinInterval = 7.5f;
                     break;
                 case Difficulty.Medio:
-                    reactionDelay = 0.40f;
-                    missChance    = 0.12f;
-                    specialForceInterval = 4f;
+                    reactionDelay      = 0.28f;
+                    missChance         = 0.12f;
+                    blockReactChance   = 0.42f;
+                    crouchReactChance  = 0.24f;
+                    comboChance        = 0.40f;
+                    specialMinInterval = 5.5f;
                     break;
                 case Difficulty.Dificil:
-                    reactionDelay = 0.15f;
-                    missChance    = 0.04f;
-                    specialForceInterval = 2f;
+                    reactionDelay      = 0.14f;
+                    missChance         = 0.04f;
+                    blockReactChance   = 0.68f;
+                    crouchReactChance  = 0.35f;
+                    comboChance        = 0.65f;
+                    specialMinInterval = 4.0f;
                     break;
             }
         }
 
-        // ── Loop de decisão principal ─────────────────────────
+        FighterController GetOpponent()
+        {
+            if (!self || !self.opponent) return null;
+            if (!opponentCtrl || opponentCtrl.transform != self.opponent)
+                opponentCtrl = self.opponent.GetComponent<FighterController>();
+            return opponentCtrl;
+        }
+
+        bool CanUseRangedSpecial()
+        {
+            return self.SpecialReady && (Time.time - lastSpecialTime >= specialMinInterval);
+        }
+
+        bool IsIncomingAttackThreat(float dist)
+        {
+            FighterController opp = GetOpponent();
+            if (opp != null && opp.IsAttacking && dist <= closeRange + 1.1f) return true;
+
+            foreach (ProjectileDamage p in FindObjectsOfType<ProjectileDamage>())
+            {
+                if (!p || p.owner == gameObject) continue;
+                float dx = p.transform.position.x - transform.position.x;
+                if (Mathf.Abs(dx) <= 4.0f && dx * self.FacingDir > 0f) return true;
+            }
+            return false;
+        }
+
+        // ── Main Decision Loop (persists across rounds) ────────
         IEnumerator Think()
         {
             while (true)
             {
-                if (self.IsDead) yield break;
-                yield return new WaitForSeconds(reactionDelay + Random.Range(0f, 0.12f));
-                if (!self || !self.opponent) continue;
+                if (!self || self.IsDead || !self.InputEnabled || !self.opponent)
+                {
+                    if (self)
+                    {
+                        self.AIMoveDir(0f);
+                        self.AISetBlock(false);
+                        self.AISetCrouch(false);
+                    }
+                    yield return null;
+                    continue;
+                }
+
+                // Wait out active attack or hitstun before making the next decision
+                while (self.IsAttacking || self.IsInHitstun)
+                {
+                    if (self.IsDead || !self.InputEnabled) break;
+                    yield return null;
+                }
+
+                if (self.IsDead || !self.InputEnabled || !self.opponent) continue;
 
                 float dist = Mathf.Abs(transform.position.x - self.opponent.position.x);
                 state = ChooseState(dist);
                 yield return ExecuteState(dist);
+
+                float pause = reactionDelay * Random.Range(0.55f, 1.05f);
+                yield return WaitInterruptible(pause);
             }
         }
 
-        // ── Loop dedicado ao especial ─────────────────────────
-        // Garante que Marx usa o especial regularmente
-        IEnumerator SpecialForcer()
+        IEnumerator WaitInterruptible(float seconds)
         {
-            yield return new WaitForSeconds(2f); // aguarda o início do round
-            while (true)
+            float t = 0f;
+            while (t < seconds)
             {
-                yield return new WaitForSeconds(specialForceInterval + Random.Range(-0.5f, 0.5f));
-                if (self.IsDead) yield break;
-                if (!self.SpecialReady) { yield return new WaitUntil(() => self.SpecialReady || self.IsDead); }
-                if (self.IsDead) yield break;
-
-                // Aproxima até range médio se necessário
+                if (!self || self.IsDead || !self.InputEnabled || !self.opponent) yield break;
                 float dist = Mathf.Abs(transform.position.x - self.opponent.position.x);
-                if (dist > midRange * 1.3f)
-                {
-                    float apTime = 0.4f;
-                    float t = 0;
-                    while (t < apTime && !self.IsDead)
-                    {
-                        int dir = transform.position.x < self.opponent.position.x ? 1 : -1;
-                        self.AIMoveDir(dir);
-                        t += Time.deltaTime;
-                        yield return null;
-                    }
-                    self.AIMoveDir(0);
-                }
-
-                // Dispara o especial
-                if (Random.value >= missChance * 0.5f && !self.IsDead)
-                    self.AISpecial();
-
-                yield return new WaitForSeconds(0.5f);
+                if (defenseCheckCd <= 0f && IsIncomingAttackThreat(dist)) yield break;
+                t += Time.deltaTime;
+                yield return null;
             }
         }
 
         State ChooseState(float dist)
         {
-            float hp = self.HPRatio;
-
-            // Recua se estiver mal de vida e perto
-            if (hp <= retreatHP && dist < midRange) return State.Retreat;
-
-            // Bloqueia aleatoriamente (mais frequente no dificil)
-            float blockChance = difficulty == Difficulty.Dificil ? 0.3f : 0.15f;
-            if (Random.value < blockChance && dist < closeRange) return State.Block;
-
-            if (dist < closeRange)
+            // Reactive defense if opponent is swinging nearby
+            if (defenseCheckCd <= 0f && IsIncomingAttackThreat(dist))
             {
-                // Perto: soco ou chute, às vezes especial se disponível
-                if (self.SpecialReady && Random.value < 0.35f) return State.Special;
-                return Random.value < 0.55f ? State.Punch : State.Kick;
+                defenseCheckCd = 0.75f;
+                float r = Random.value;
+                if (r < blockReactChance) return State.Block;
+                if (r < blockReactChance + crouchReactChance) return State.Crouch;
             }
 
-            if (dist < midRange)
+            // Low-HP spacing
+            if (self.HPRatio <= retreatHP && dist < closeRange * 1.1f && Random.value < 0.45f)
+                return State.Retreat;
+
+            // 1) Melee Range
+            if (dist <= closeRange)
             {
-                // Médio: especial se disponível (alta chance), senão aproxima
-                if (self.SpecialReady && Random.value < 0.55f) return State.Special;
-                return Random.value < 0.65f ? State.Approach : State.Jump;
+                float roll = Random.value;
+                if (roll < 0.14f) return State.Block;
+                if (roll < 0.24f) return State.Crouch;
+                if (roll < 0.30f && CanUseRangedSpecial()) return State.Special;
+
+                // Mix LightPunch, HeavyPunch, Kick, and CrouchPoke based on distance
+                if (dist <= 1.35f)
+                {
+                    float atk = Random.value;
+                    if (atk < 0.42f) return State.LightPunch;
+                    if (atk < 0.68f) return State.HeavyPunch;
+                    if (atk < 0.86f) return State.Kick;
+                    return State.CrouchPoke;
+                }
+                else
+                {
+                    float atk = Random.value;
+                    if (atk < 0.45f) return State.Kick;
+                    if (atk < 0.75f) return State.HeavyPunch;
+                    if (atk < 0.90f) return State.LightPunch;
+                    return State.CrouchPoke;
+                }
             }
 
-            // Longe: aproxima, às vezes pula para chegar mais rápido
-            return Random.value < 0.7f ? State.Approach : State.Jump;
+            // 2) Mid Range: fire Special selectively or close the gap
+            if (dist <= midRange)
+            {
+                if (CanUseRangedSpecial() && Random.value < 0.52f)
+                    return State.Special;
+
+                float r = Random.value;
+                if (r < 0.72f) return State.Approach;
+                if (r < 0.86f) return State.Jump;
+                return State.Crouch;
+            }
+
+            // 3) Long Range: close distance actively, or fire ranged Special
+            if (CanUseRangedSpecial() && Random.value < 0.40f)
+                return State.Special;
+
+            return Random.value < 0.82f ? State.Approach : State.Jump;
         }
 
-        IEnumerator ExecuteState(float dist)
+        IEnumerator ExecuteState(float initialDist)
         {
             switch (state)
             {
-                // ── Idle: pausa breve ──
                 case State.Idle:
-                    yield return new WaitForSeconds(Random.Range(0.08f, 0.25f));
+                    yield return new WaitForSeconds(Random.Range(0.06f, 0.16f));
                     break;
 
-                // ── Approach: anda em direção ao oponente ──
                 case State.Approach:
                 {
-                    float dur = Random.Range(0.2f, 0.5f);
-                    float t = 0;
-                    while (t < dur && !self.IsDead)
+                    float maxDur = initialDist > midRange ? Random.Range(0.55f, 0.95f) : Random.Range(0.30f, 0.60f);
+                    float t = 0f;
+                    while (t < maxDur && self && !self.IsDead && self.InputEnabled && self.opponent)
                     {
+                        float d = Mathf.Abs(transform.position.x - self.opponent.position.x);
+                        if (d <= closeRange * 0.85f) break;
+                        if (defenseCheckCd <= 0f && IsIncomingAttackThreat(d)) break;
+
                         int dir = transform.position.x < self.opponent.position.x ? 1 : -1;
                         self.AIMoveDir(dir);
                         t += Time.deltaTime;
                         yield return null;
                     }
-                    self.AIMoveDir(0);
+                    if (self) self.AIMoveDir(0f);
                     break;
                 }
 
-                // ── Retreat: recua ──
                 case State.Retreat:
                 {
-                    float dur = Random.Range(0.3f, 0.5f);
-                    float t = 0;
-                    while (t < dur && !self.IsDead)
+                    float dur = Random.Range(0.28f, 0.48f);
+                    float t   = 0f;
+                    while (t < dur && self && !self.IsDead && self.InputEnabled && self.opponent)
                     {
                         int dir = transform.position.x < self.opponent.position.x ? -1 : 1;
                         self.AIMoveDir(dir);
                         t += Time.deltaTime;
                         yield return null;
                     }
-                    self.AIMoveDir(0);
+                    if (self) self.AIMoveDir(0f);
                     break;
                 }
 
-                // ── Punch ──
-                case State.Punch:
-                    if (Random.value >= missChance) self.AIPunch();
-                    yield return new WaitForSeconds(0.5f);
+                case State.LightPunch:
+                    if (Random.value >= missChance)
+                    {
+                        self.AILightPunch();
+                        yield return WaitAttackFinish();
+                        // Optional combo follow-up into HeavyPunch or Kick
+                        if (self && !self.IsDead && self.opponent && Random.value < comboChance)
+                        {
+                            float d = Mathf.Abs(transform.position.x - self.opponent.position.x);
+                            if (d <= closeRange)
+                            {
+                                if (Random.value < 0.5f) self.AIHeavyPunch();
+                                else self.AIKick();
+                                yield return WaitAttackFinish();
+                            }
+                        }
+                    }
                     break;
 
-                // ── Kick ──
+                case State.HeavyPunch:
+                    if (Random.value >= missChance)
+                    {
+                        self.AIHeavyPunch();
+                        yield return WaitAttackFinish();
+                    }
+                    break;
+
                 case State.Kick:
-                    if (Random.value >= missChance) self.AIKick();
-                    yield return new WaitForSeconds(0.55f);
+                    if (Random.value >= missChance)
+                    {
+                        self.AIKick();
+                        yield return WaitAttackFinish();
+                    }
                     break;
 
-                // ── Special: FOICE + MARTELO ──
+                case State.CrouchPoke:
+                    self.AISetCrouch(true);
+                    yield return new WaitForSeconds(0.08f);
+                    if (self && !self.IsDead && self.InputEnabled && Random.value >= missChance)
+                    {
+                        if (Random.value < 0.55f) self.AILightPunch();
+                        else self.AIKick();
+                        yield return WaitAttackFinish();
+                    }
+                    if (self) self.AISetCrouch(false);
+                    break;
+
                 case State.Special:
-                    if (self.SpecialReady && Random.value >= missChance * 0.5f)
+                    if (CanUseRangedSpecial() && Random.value >= missChance * 0.5f)
+                    {
+                        lastSpecialTime = Time.time;
                         self.AISpecial();
-                    yield return new WaitForSeconds(0.8f);
+                        yield return WaitAttackFinish();
+                    }
                     break;
 
-                // ── Block ──
                 case State.Block:
+                {
                     self.AISetBlock(true);
-                    yield return new WaitForSeconds(Random.Range(0.3f, 0.65f));
-                    self.AISetBlock(false);
+                    float dur = Random.Range(0.28f, 0.52f);
+                    float t   = 0f;
+                    while (t < dur && self && !self.IsDead && self.InputEnabled)
+                    {
+                        t += Time.deltaTime;
+                        yield return null;
+                    }
+                    if (self) self.AISetBlock(false);
                     break;
+                }
 
-                // ── Jump: salta para fechar distância ──
-                case State.Jump:
-                    if (self.IsGrounded) self.AIJump();
-                    yield return new WaitForSeconds(0.55f);
+                case State.Crouch:
+                {
+                    self.AISetCrouch(true);
+                    float dur = Random.Range(0.22f, 0.42f);
+                    float t   = 0f;
+                    while (t < dur && self && !self.IsDead && self.InputEnabled)
+                    {
+                        t += Time.deltaTime;
+                        yield return null;
+                    }
+                    if (self) self.AISetCrouch(false);
                     break;
+                }
+
+                case State.Jump:
+                    if (self.IsGrounded)
+                    {
+                        self.AIJump();
+                        float dur = 0.42f;
+                        float t   = 0f;
+                        int dir   = self.opponent ? (transform.position.x < self.opponent.position.x ? 1 : -1) : self.FacingDir;
+                        while (t < dur && self && !self.IsDead && self.InputEnabled)
+                        {
+                            self.AIMoveDir(dir);
+                            t += Time.deltaTime;
+                            yield return null;
+                        }
+                        if (self) self.AIMoveDir(0f);
+                    }
+                    break;
+            }
+        }
+
+        IEnumerator WaitAttackFinish()
+        {
+            float safety = 1.2f;
+            while (self && self.IsAttacking && !self.IsDead && safety > 0f)
+            {
+                safety -= Time.deltaTime;
+                yield return null;
             }
         }
     }

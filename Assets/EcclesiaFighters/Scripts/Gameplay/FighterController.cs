@@ -7,25 +7,22 @@ using UnityEngine.UI;
 namespace EcclesiaFighters
 {
     /// <summary>
-    /// Handles movement, attacks, blocking and HP for ONE fighter.
-    /// Attach to each character prefab.
-    /// isPlayer = true  → reads keyboard input (Player 1)
-    /// isPlayer = false → FighterAI drives this controller
+    /// Handles movement, crouching, blocking, combo-timed attacks, melee hitboxes,
+    /// hitstun/knockback, placeholder feedback, and guarded Animator hooks for ONE fighter.
     ///
     /// ── Animator contract (Mixamo-ready) ──────────────────────────────────
-    /// Assign an AnimatorController whose parameters / states use these names.
-    /// Every call is guarded, so missing parameters or a missing controller are
-    /// silently ignored instead of spamming the console.
-    ///   State    "Idle"                     (default state; also Played on ResetFighter)
-    ///   Bool     "Walking"                  true while moving horizontally
-    ///   Trigger  "Jump"                     DoJump()
-    ///   Trigger  "Punch"                    DoAttack("Punch")
-    ///   Trigger  "Kick"                     DoAttack("Kick")
-    ///   Trigger  "Special"                  DoSpecial()
-    ///   Trigger  "Hit"                      TakeDamage() while not blocking
-    ///   Trigger  "Death"                    TakeDamage() when HP reaches 0
-    ///   Bool     "Blocking"  (optional)     true while guarding
-    ///   Trigger  "Idle"      (optional)     only used if the controller has no "Idle" state
+    ///   State    "Idle"          (default state; played on ResetFighter)
+    ///   Bool     "Walking"       true while walking forward
+    ///   Bool     "WalkingBack"   true while walking backward
+    ///   Bool     "Crouching"     true while crouched
+    ///   Bool     "Blocking"      true while guarding
+    ///   Trigger  "Jump"          DoJump()
+    ///   Trigger  "LightPunch"    Light punch (falls back to "Punch" if missing)
+    ///   Trigger  "HeavyPunch"    Heavy punch (falls back to "Punch" if missing)
+    ///   Trigger  "Kick"          Kick
+    ///   Trigger  "Special"       Special projectile attack
+    ///   Trigger  "Hit"           Unblocked hitstun
+    ///   Trigger  "Death"         KO
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     [RequireComponent(typeof(Animator))]
@@ -36,23 +33,72 @@ namespace EcclesiaFighters
         {
             /// <summary>Rotate the root around Y (±90°). Correct for 3D models.</summary>
             RotateY,
-            /// <summary>Mirror transform.localScale.x. Only correct for flat sprites that are not rotated.</summary>
+            /// <summary>Mirror transform.localScale.x. Only correct for flat sprites.</summary>
             FlipScaleX
         }
 
-        // ── Identity ──────────────────────────────────────────
-        public string characterName = "Fighter";
-        public bool   isPlayer = true;
+        public enum AttackType { None, LightPunch, HeavyPunch, Kick, Special }
+        enum AttackPhase { None, Startup, Active, Recovery }
 
-        // ── Stats ─────────────────────────────────────────────
-        public float maxHP          = 100f;
-        public float moveSpeed      = 4f;
-        public float jumpForce      = 7.5f;
-        public float punchDamage    = 10f;
-        public float kickDamage     = 14f;
-        public float specialDamage  = 38f;
-        public float specialCooldown= 5f;
-        public float blockReduction = 0.15f;   // blocked hit = 15% damage
+        [Serializable]
+        public struct AttackConfig
+        {
+            public float damage;
+            public float startup;
+            public float active;
+            public float recovery;
+            public float cooldown;
+            public float range;
+            public Vector3 hitHalfExtents;
+            public float knockback;
+            public float hitstun;
+
+            public AttackConfig(
+                float damage, float startup, float active, float recovery, float cooldown,
+                float range, Vector3 hitHalfExtents, float knockback, float hitstun)
+            {
+                this.damage         = damage;
+                this.startup        = startup;
+                this.active         = active;
+                this.recovery       = recovery;
+                this.cooldown       = cooldown;
+                this.range          = range;
+                this.hitHalfExtents = hitHalfExtents;
+                this.knockback      = knockback;
+                this.hitstun        = hitstun;
+            }
+        }
+
+        // ── Identity ──────────────────────────────────────────
+        [Header("Identity")]
+        public string characterName = "Fighter";
+        public bool   isPlayer      = true;
+
+        // ── Stats & Movement ──────────────────────────────────
+        [Header("Stats & Movement")]
+        public float maxHP                   = 100f;
+        public float moveSpeed               = 4.5f;
+        [Range(0.3f, 1f)] public float backWalkSpeedMultiplier = 0.82f;
+        [Range(0.2f, 0.9f)] public float crouchSpeedMultiplier = 0.45f;
+        [Range(0.4f, 0.85f)] public float crouchHeightRatio    = 0.60f;
+        public float jumpForce               = 7.8f;
+        public float blockReduction          = 0.15f;   // blocked hit = 15% chip damage
+        public float blockKnockbackScale     = 0.35f;
+        public float knockbackDamping        = 18f;
+        public float invulnerabilityDuration = 0.22f;
+
+        [Header("Stage Bounds")]
+        public float stageMinX = -8.5f;
+        public float stageMaxX =  8.5f;
+
+        // ── Attacks ───────────────────────────────────────────
+        [Header("Melee Moves")]
+        public AttackConfig lightPunch = new AttackConfig(
+            8f,  0.07f, 0.09f, 0.14f, 0.08f, 0.85f, new Vector3(0.55f, 0.40f, 0.75f), 2.2f, 0.18f);
+        public AttackConfig heavyPunch = new AttackConfig(
+            15f, 0.16f, 0.12f, 0.26f, 0.18f, 1.05f, new Vector3(0.65f, 0.42f, 0.75f), 5.0f, 0.32f);
+        public AttackConfig kick = new AttackConfig(
+            13f, 0.13f, 0.13f, 0.24f, 0.15f, 1.25f, new Vector3(0.75f, 0.42f, 0.75f), 5.8f, 0.28f);
 
         // ── Facing ────────────────────────────────────────────
         [Header("Facing")]
@@ -60,40 +106,57 @@ namespace EcclesiaFighters
 
         // ── Special projectile ────────────────────────────────
         [Header("Special")]
+        public float specialDamage    = 28f;
+        public float specialCooldown  = 5f;
+        public float specialStartup   = 0.16f;
+        public float specialActive    = 0.10f;
+        public float specialRecovery  = 0.24f;
+        public float specialSpeed     = 16f;
         public GameObject specialPrefab;
         [Tooltip("Spawn origin of the special. If empty, a 'FirePoint' child is created at chest height on first use.")]
         public Transform  firePoint;
-        [Tooltip("Chest height as a fraction of the collider height (0 = feet, 1 = head).")]
         [Range(0f, 1f)] public float chestHeightRatio = 0.7f;
-        [Tooltip("Chest height in metres, used only when the fighter has no Collider.")]
         public float fallbackChestHeight = 1.3f;
-        [Tooltip("How far in front of the firePoint (along the facing direction) the projectile spawns.")]
-        public float muzzleForwardOffset = 0.5f;
+        public float muzzleForwardOffset = 0.55f;
 
         // ── Controls (Player 1 defaults) ──────────────────────
         [Header("Controls — ignored when isPlayer=false")]
-        public KeyCode kLeft    = KeyCode.A;
-        public KeyCode kRight   = KeyCode.D;
-        public KeyCode kJump    = KeyCode.W;
-        public KeyCode kBlock   = KeyCode.S;
-        public KeyCode kPunch   = KeyCode.J;
-        public KeyCode kKick    = KeyCode.K;
-        public KeyCode kSpecial = KeyCode.L;
+        public KeyCode keyLeft       = KeyCode.A;
+        public KeyCode keyRight      = KeyCode.D;
+        public KeyCode keyJump       = KeyCode.W;
+        public KeyCode keyJumpAlt    = KeyCode.Space;
+        public KeyCode keyCrouch     = KeyCode.S;
+        public KeyCode keyBlock      = KeyCode.LeftShift;
+        public KeyCode keyLightPunch = KeyCode.J;
+        public KeyCode keyHeavyPunch = KeyCode.K;
+        public KeyCode keyKick       = KeyCode.L;
+        public KeyCode keySpecial1   = KeyCode.U;
+        public KeyCode keySpecial2   = KeyCode.I;
+
+        // ── Placeholder Visual Feedback ───────────────────────
+        [Header("Placeholder Visuals (Pre-Animation Testing)")]
+        public bool      usePlaceholderVisuals = true;
+        public Transform visualRoot;
 
         // ── References ────────────────────────────────────────
-        [HideInInspector] public Transform  opponent;
-        [HideInInspector] public Slider     hpBar;
-        [HideInInspector] public Action     OnKO;
+        [HideInInspector] public Transform opponent;
+        [HideInInspector] public Slider    hpBar;
+        [HideInInspector] public Action    OnKO;
 
-        // ── Public state (read by AI) ─────────────────────────
-        public float CurrentHP      => hp;
-        public float HPRatio        => hp / maxHP;
-        public bool  IsGrounded     => grounded;
-        public bool  IsBlocking     => blocking;
-        public bool  SpecialReady   => spCooldown <= 0;
-        public bool  IsDead         => dead;
+        // ── Public state (read by FighterAI & HUD) ────────────
+        public float      CurrentHP     => hp;
+        public float      HPRatio       => hp / maxHP;
+        public bool       IsGrounded    => grounded;
+        public bool       IsBlocking    => blocking;
+        public bool       IsCrouching   => crouching;
+        public bool       IsAttacking   => isAttacking;
+        public bool       IsInHitstun   => hitstunTimer > 0f;
+        public bool       InputEnabled  => inputEnabled;
+        public AttackType CurrentAttack => currentAttack;
+        public bool       SpecialReady  => spCooldown <= 0f;
+        public bool       IsDead        => dead;
 
-        /// <summary>+1 = facing right (+X), -1 = facing left (-X). Derived from the transform, so it can never desync.</summary>
+        /// <summary>+1 = facing right (+X), -1 = facing left (-X). Derived from transform so it cannot desync.</summary>
         public int FacingDir => facingMode == FacingMode.FlipScaleX
             ? (transform.localScale.x >= 0f ? 1 : -1)
             : (transform.forward.x   >= 0f ? 1 : -1);
@@ -102,53 +165,122 @@ namespace EcclesiaFighters
         public Vector3 FacingVector => new Vector3(FacingDir, 0f, 0f);
 
         // ── Animator hashes ───────────────────────────────────
-        static readonly int HashIdle     = Animator.StringToHash("Idle");
-        static readonly int HashWalking  = Animator.StringToHash("Walking");
-        static readonly int HashJump     = Animator.StringToHash("Jump");
-        static readonly int HashPunch    = Animator.StringToHash("Punch");
-        static readonly int HashKick     = Animator.StringToHash("Kick");
-        static readonly int HashSpecial  = Animator.StringToHash("Special");
-        static readonly int HashHit      = Animator.StringToHash("Hit");
-        static readonly int HashDeath    = Animator.StringToHash("Death");
-        static readonly int HashBlocking = Animator.StringToHash("Blocking");
+        static readonly int HashIdle        = Animator.StringToHash("Idle");
+        static readonly int HashWalking     = Animator.StringToHash("Walking");
+        static readonly int HashWalkingBack = Animator.StringToHash("WalkingBack");
+        static readonly int HashCrouching   = Animator.StringToHash("Crouching");
+        static readonly int HashBlocking    = Animator.StringToHash("Blocking");
+        static readonly int HashJump        = Animator.StringToHash("Jump");
+        static readonly int HashLightPunch  = Animator.StringToHash("LightPunch");
+        static readonly int HashHeavyPunch  = Animator.StringToHash("HeavyPunch");
+        static readonly int HashPunch       = Animator.StringToHash("Punch");
+        static readonly int HashKick        = Animator.StringToHash("Kick");
+        static readonly int HashSpecial     = Animator.StringToHash("Special");
+        static readonly int HashHit         = Animator.StringToHash("Hit");
+        static readonly int HashDeath       = Animator.StringToHash("Death");
 
-        // ── Private ───────────────────────────────────────────
-        float  hp, spCooldown;
-        bool   grounded = true, blocking, dead, inputEnabled, walking;
-        Rigidbody rb;
-        Animator  anim;
-        bool      isAttacking;
+        static readonly int ShaderColorId     = Shader.PropertyToID("_Color");
+        static readonly int ShaderBaseColorId = Shader.PropertyToID("_BaseColor");
 
-        // name-hash → type of every parameter that actually exists in the controller
+        static Material sharedHitIndicatorMat;
+        static Material sharedFallbackProjMat;
+
+        // ── Runtime state ─────────────────────────────────────
+        float hp, spCooldown, attackCooldownTimer;
+        float hitstunTimer, invulnTimer, hitFlashTimer, blockFlashTimer;
+        float jumpGraceTimer, lastGroundContactTime = -10f;
+        float stageZ;
+
+        bool grounded = true, blocking, crouching, dead, inputEnabled;
+        bool walkingForward, walkingBackward;
+        bool holdingAway, aiWantsBlock, aiWantsCrouch;
+        bool isAttacking;
+
+        AttackType  currentAttack = AttackType.None;
+        AttackPhase attackPhase   = AttackPhase.None;
+        float       attackPhaseT;
+        Coroutine   attackRoutine;
+
+        Rigidbody         rb;
+        Animator          anim;
+        CapsuleCollider   capsule;
+        FighterController cachedOpponentCtrl;
+
+        float   origColliderHeight = 1.93f;
+        Vector3 origColliderCenter = Vector3.zero;
+        float   bottomLocalY       = -0.965f;
+
+        // ── Visual feedback cache ─────────────────────────────
+        Vector3    baseVisualLocalPos;
+        Quaternion baseVisualLocalRot;
+        Vector3    baseVisualLocalScale;
+        Vector3    visualUpWeights = Vector3.up;
+        bool       hasVisualRoot;
+        bool       placeholderWasActive;
+
+        Renderer[]            cachedRenderers;
+        Color[]               baseRendererColors;
+        MaterialPropertyBlock propBlock;
+        float                 currentVisualSquash = 1f;
+        float                 currentVisualTilt;
+        float                 currentVisualLunge;
+
+        // ── Animator cache ────────────────────────────────────
         readonly Dictionary<int, AnimatorControllerParameterType> animParams =
             new Dictionary<int, AnimatorControllerParameterType>();
         bool animReady;
 
+        // ══════════════════════════════════════════════════════
+        //  Lifecycle
+        // ══════════════════════════════════════════════════════
         void Awake()
         {
-            rb   = GetComponent<Rigidbody>();
-            anim = GetComponent<Animator>();
+            rb      = GetComponent<Rigidbody>();
+            anim    = GetComponent<Animator>();
+            capsule = GetComponent<CapsuleCollider>();
+
             rb.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionZ;
+            stageZ = transform.position.z;
+
+            if (capsule)
+            {
+                origColliderHeight = capsule.height;
+                origColliderCenter = capsule.center;
+                bottomLocalY       = origColliderCenter.y - origColliderHeight * 0.5f;
+            }
+
             CacheAnimator();
+            CacheVisuals();
         }
 
-        void Start()
-        {
-            ResetFighter();
-            // Player 2 control scheme
-            if (!isPlayer)
-            {
-                kLeft = KeyCode.LeftArrow; kRight = KeyCode.RightArrow;
-                kJump = KeyCode.UpArrow;   kBlock = KeyCode.DownArrow;
-                kPunch = KeyCode.Keypad1;  kKick  = KeyCode.Keypad2;
-                kSpecial = KeyCode.Keypad3;
-            }
-        }
+        void Start() => ResetFighter();
 
         public void ResetFighter()
         {
-            hp = maxHP; spCooldown = 0; dead = false; isAttacking = false;
-            blocking = false; walking = false;
+            StopActiveAttack();
+
+            hp                  = maxHP;
+            spCooldown          = 0f;
+            attackCooldownTimer = 0f;
+            hitstunTimer        = 0f;
+            invulnTimer         = 0f;
+            hitFlashTimer       = 0f;
+            blockFlashTimer     = 0f;
+            jumpGraceTimer      = 0f;
+            dead                = false;
+            grounded            = true;
+            holdingAway         = false;
+            aiWantsBlock        = false;
+            aiWantsCrouch       = false;
+
+            if (rb) rb.velocity = Vector3.zero;
+
+            SetWalking(false, false);
+            SetCrouching(false);
+            SetBlocking(false);
+            RestoreCollider();
+            ResetVisualPose();
+
             if (hpBar) hpBar.value = 1f;
             ResetAnimator();
         }
@@ -156,10 +288,20 @@ namespace EcclesiaFighters
         public void SetInputEnabled(bool v)
         {
             inputEnabled = v;
-            if (!v) SetWalking(false);
+            if (!v)
+            {
+                holdingAway   = false;
+                aiWantsBlock  = false;
+                aiWantsCrouch = false;
+                SetWalking(false, false);
+                SetCrouching(false);
+                SetBlocking(false);
+            }
         }
 
-        // ── Facing ────────────────────────────────────────────
+        // ══════════════════════════════════════════════════════
+        //  Facing
+        // ══════════════════════════════════════════════════════
         /// <summary>Turn to face +X (dir &gt; 0) or -X (dir &lt; 0). dir == 0 is ignored.</summary>
         public void FaceDirection(int dir)
         {
@@ -178,105 +320,494 @@ namespace EcclesiaFighters
             }
         }
 
-        // ── Called by FighterAI ───────────────────────────────
+        void FaceOpponent()
+        {
+            if (!opponent) return;
+            float diff = opponent.position.x - transform.position.x;
+            if (Mathf.Abs(diff) < 0.05f) return;
+            FaceDirection(diff > 0f ? 1 : -1);
+        }
+
+        FighterController GetOpponentController()
+        {
+            if (!opponent) return null;
+            if (!cachedOpponentCtrl || cachedOpponentCtrl.transform != opponent)
+                cachedOpponentCtrl = opponent.GetComponent<FighterController>();
+            return cachedOpponentCtrl;
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  AI Control API (called by FighterAI)
+        // ══════════════════════════════════════════════════════
         public void AIMoveDir(float dir)
         {
-            if (dead || !inputEnabled) return;
-            if (dir == 0) SetWalking(false); else Move(dir);
+            if (!CanAct()) { SetWalking(false, false); return; }
+            if (Mathf.Abs(dir) < 0.01f || blocking)
+                SetWalking(false, false);
+            else
+                Move(Mathf.Sign(dir));
         }
-        public void AIJump()             { if (!dead && inputEnabled && grounded) DoJump(); }
-        public void AIPunch()            { if (!dead && inputEnabled) StartCoroutine(DoAttack("Punch",  punchDamage,   0.9f)); }
-        public void AIKick()             { if (!dead && inputEnabled) StartCoroutine(DoAttack("Kick",   kickDamage,    1.0f)); }
-        public void AISpecial()          { if (!dead && inputEnabled && SpecialReady) DoSpecial(); }
-        public void AISetBlock(bool v)   { if (!dead && inputEnabled) SetBlocking(v); }
 
-        // ── Update (player only) ──────────────────────────────
+        public void AIJump()
+        {
+            if (CanAct() && grounded && !crouching && !blocking) DoJump();
+        }
+
+        public void AILightPunch() { TryStartMelee(AttackType.LightPunch); }
+        public void AIHeavyPunch() { TryStartMelee(AttackType.HeavyPunch); }
+        public void AIPunch()      { TryStartMelee(AttackType.LightPunch); }
+        public void AIKick()       { TryStartMelee(AttackType.Kick); }
+        public void AISpecial()    { TryStartSpecial(); }
+
+        public void AISetBlock(bool v)
+        {
+            aiWantsBlock = v;
+            if (dead || !inputEnabled) { SetBlocking(false); return; }
+            if (v && !isAttacking && hitstunTimer <= 0f && grounded)
+            {
+                SetWalking(false, false);
+                SetBlocking(true);
+            }
+            else if (!v)
+            {
+                SetBlocking(false);
+            }
+        }
+
+        public void AISetCrouch(bool v)
+        {
+            aiWantsCrouch = v;
+            if (dead || !inputEnabled) { SetCrouching(false); return; }
+            SetCrouching(v && grounded && !isAttacking && hitstunTimer <= 0f);
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  Update & Physics
+        // ══════════════════════════════════════════════════════
         void Update()
         {
-            if (!inputEnabled || dead || !isPlayer) { spCooldown -= Time.deltaTime; return; }
-            spCooldown -= Time.deltaTime;
+            float dt = Time.deltaTime;
+            if (spCooldown          > 0f) spCooldown          -= dt;
+            if (attackCooldownTimer > 0f) attackCooldownTimer -= dt;
+            if (invulnTimer         > 0f) invulnTimer         -= dt;
+            if (hitFlashTimer       > 0f) hitFlashTimer       -= dt;
+            if (blockFlashTimer     > 0f) blockFlashTimer     -= dt;
+            if (jumpGraceTimer      > 0f) jumpGraceTimer      -= dt;
 
-            // Block
-            SetBlocking(Input.GetKey(kBlock) && grounded);
-
-            // Move (can't move while blocking)
-            if (!blocking && !isAttacking)
+            if (hitstunTimer > 0f)
             {
-                float dir = 0;
-                if (Input.GetKey(kLeft))  dir = -1;
-                if (Input.GetKey(kRight)) dir =  1;
-                if (dir != 0) Move(dir); else SetWalking(false);
-            }
-            else SetWalking(false);
-
-            // Jump
-            if (Input.GetKeyDown(kJump) && grounded && !blocking) DoJump();
-
-            // Attacks
-            if (!isAttacking)
-            {
-                if (Input.GetKeyDown(kPunch))  StartCoroutine(DoAttack("Punch",  punchDamage,  0.9f));
-                if (Input.GetKeyDown(kKick))   StartCoroutine(DoAttack("Kick",   kickDamage,   1.0f));
-                if (Input.GetKeyDown(kSpecial) && SpecialReady) DoSpecial();
+                hitstunTimer -= dt;
+                if (hitstunTimer <= 0f) hitstunTimer = 0f;
             }
 
-            FaceOpponent();
+            if (dead)
+            {
+                UpdatePlaceholderVisuals();
+                return;
+            }
+
+            if (!inputEnabled)
+            {
+                SetWalking(false, false);
+                SetBlocking(false);
+                SetCrouching(false);
+                UpdatePlaceholderVisuals();
+                return;
+            }
+
+            if (isPlayer)
+                HandlePlayerInput();
+            else
+                RefreshAIStates();
+
+            if (!isAttacking && hitstunTimer <= 0f) FaceOpponent();
+            ClampStagePosition();
+            UpdatePlaceholderVisuals();
         }
+
+        void FixedUpdate()
+        {
+            if (jumpGraceTimer <= 0f)
+                grounded = (Time.time - lastGroundContactTime) < 0.08f || CheckFeetGrounded();
+
+            if (rb)
+            {
+                Vector3 v = rb.velocity;
+                v.x = Mathf.MoveTowards(v.x, 0f, knockbackDamping * Time.fixedDeltaTime);
+                v.z = 0f;
+                rb.velocity = v;
+            }
+
+            ClampStagePosition();
+        }
+
+        void RefreshAIStates()
+        {
+            bool stunned = hitstunTimer > 0f;
+            if (stunned || !grounded)
+            {
+                SetCrouching(false);
+                SetBlocking(false);
+                SetWalking(false, false);
+                return;
+            }
+
+            SetCrouching(aiWantsCrouch && !isAttacking);
+            SetBlocking(aiWantsBlock && !isAttacking);
+            if (isAttacking || blocking) SetWalking(false, false);
+        }
+
+        void HandlePlayerInput()
+        {
+            if (hitstunTimer > 0f)
+            {
+                holdingAway = false;
+                SetWalking(false, false);
+                SetCrouching(false);
+                SetBlocking(false);
+                return;
+            }
+
+            // Read directional & posture inputs
+            float dir = 0f;
+            if (Input.GetKey(keyLeft)  || Input.GetKey(KeyCode.LeftArrow))  dir -= 1f;
+            if (Input.GetKey(keyRight) || Input.GetKey(KeyCode.RightArrow)) dir += 1f;
+
+            bool crouchHeld = (Input.GetKey(keyCrouch) || Input.GetKey(KeyCode.DownArrow)) && grounded;
+            bool shiftBlock = (Input.GetKey(keyBlock)  || Input.GetKey(KeyCode.RightShift)) && grounded;
+            holdingAway     = grounded && dir != 0f && (dir * FacingDir < 0f);
+
+            if (!isAttacking) SetCrouching(crouchHeld);
+
+            // Attacks take priority when ready
+            if (!isAttacking && attackCooldownTimer <= 0f)
+            {
+                if (Input.GetKeyDown(keySpecial1) || Input.GetKeyDown(keySpecial2))
+                {
+                    if (TryStartSpecial()) return;
+                }
+                if (Input.GetKeyDown(keyLightPunch)) { TryStartMelee(AttackType.LightPunch); return; }
+                if (Input.GetKeyDown(keyHeavyPunch)) { TryStartMelee(AttackType.HeavyPunch); return; }
+                if (Input.GetKeyDown(keyKick))       { TryStartMelee(AttackType.Kick);       return; }
+            }
+
+            if (isAttacking)
+            {
+                SetWalking(false, false);
+                SetBlocking(false);
+                SetCrouching(crouchHeld);
+                return;
+            }
+
+            bool autoAwayBlock = holdingAway && IsThreatApproaching();
+            bool blockActive   = shiftBlock || autoAwayBlock;
+            SetBlocking(blockActive);
+
+            // Jump (allowed when standing and not actively shift-blocking)
+            bool jumpPressed = Input.GetKeyDown(keyJump) || Input.GetKeyDown(keyJumpAlt) || Input.GetKeyDown(KeyCode.UpArrow);
+            if (jumpPressed && grounded && !crouching && !shiftBlock)
+            {
+                DoJump();
+                return;
+            }
+
+            // Horizontal walk / crouch-walk (shift-block holds position)
+            if (dir != 0f && !shiftBlock && !autoAwayBlock)
+                Move(dir);
+            else
+                SetWalking(false, false);
+        }
+
+        bool IsThreatApproaching()
+        {
+            FighterController opp = GetOpponentController();
+            if (opp != null && opp.IsAttacking && Mathf.Abs(opp.transform.position.x - transform.position.x) <= 4.5f)
+                return true;
+
+            foreach (ProjectileDamage p in FindObjectsOfType<ProjectileDamage>())
+            {
+                if (!p || p.owner == gameObject) continue;
+                float dx = p.transform.position.x - transform.position.x;
+                if (Mathf.Abs(dx) <= 4.2f && dx * FacingDir > 0f) return true;
+            }
+            return false;
+        }
+
+        bool CanAct() => !dead && inputEnabled && !isAttacking && hitstunTimer <= 0f;
 
         void Move(float dir)
         {
-            if (dir == 0) return;
-            transform.Translate(Vector3.right * dir * moveSpeed * Time.deltaTime, Space.World);
-            SetWalking(true);
+            if (Mathf.Approximately(dir, 0f)) { SetWalking(false, false); return; }
+
+            float speed = moveSpeed;
+            bool isForward = dir * FacingDir >= 0f;
+            if (crouching)       speed *= crouchSpeedMultiplier;
+            else if (!isForward) speed *= backWalkSpeedMultiplier;
+
+            transform.Translate(Vector3.right * dir * speed * Time.deltaTime, Space.World);
+            ClampStagePosition();
+
+            if (grounded) SetWalking(isForward, !isForward);
+            else          SetWalking(false, false);
+        }
+
+        void ClampStagePosition()
+        {
+            Vector3 p = transform.position;
+            p.x = Mathf.Clamp(p.x, stageMinX, stageMaxX);
+            p.z = stageZ;
+            transform.position = p;
         }
 
         void DoJump()
         {
-            grounded = false;
-            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+            grounded        = false;
+            jumpGraceTimer  = 0.12f;
+            SetWalking(false, false);
+            SetCrouching(false);
+            SetBlocking(false);
+
+            if (rb)
+            {
+                Vector3 v = rb.velocity;
+                v.y = 0f;
+                rb.velocity = v;
+                rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+            }
             AnimTrigger(HashJump);
         }
 
-        IEnumerator DoAttack(string trigger, float dmg, float hitDelay)
+        // ══════════════════════════════════════════════════════
+        //  Attacks & Hit Detection
+        // ══════════════════════════════════════════════════════
+        bool TryStartMelee(AttackType type)
         {
-            isAttacking = true;
-            SetWalking(false);
-            AnimTrigger(Animator.StringToHash(trigger));    // "Punch" / "Kick"
-            yield return new WaitForSeconds(hitDelay * 0.45f);   // wind-up
-
-            // Hit detection (in front of the fighter, along the facing direction)
-            Vector3 hitPos = transform.position + FacingVector * 1.1f + Vector3.up * 1f;
-            var hits = Physics.OverlapSphere(hitPos, 0.75f);
-            foreach (var h in hits)
-            {
-                if (h.gameObject == gameObject) continue;
-                h.GetComponent<FighterController>()?.TakeDamage(dmg);
-            }
-            yield return new WaitForSeconds(hitDelay * 0.55f);   // recovery
-            isAttacking = false;
+            if (!CanAct() || attackCooldownTimer > 0f) return false;
+            StopActiveAttack();
+            attackRoutine = StartCoroutine(DoMeleeAttack(type));
+            return true;
         }
 
-        void DoSpecial()
+        bool TryStartSpecial()
         {
-            if (!specialPrefab) return;
-            spCooldown = specialCooldown;
-            AnimTrigger(HashSpecial);
+            if (!CanAct() || attackCooldownTimer > 0f || !SpecialReady) return false;
+            StopActiveAttack();
+            attackRoutine = StartCoroutine(DoSpecialAttack());
+            return true;
+        }
 
+        void StopActiveAttack()
+        {
+            if (attackRoutine != null) { StopCoroutine(attackRoutine); attackRoutine = null; }
+            isAttacking   = false;
+            currentAttack = AttackType.None;
+            attackPhase   = AttackPhase.None;
+            attackPhaseT  = 0f;
+        }
+
+        AttackConfig GetAttackConfig(AttackType type)
+        {
+            switch (type)
+            {
+                case AttackType.HeavyPunch: return heavyPunch;
+                case AttackType.Kick:       return kick;
+                default:                    return lightPunch;
+            }
+        }
+
+        void TriggerAttackAnimation(AttackType type)
+        {
+            switch (type)
+            {
+                case AttackType.LightPunch:
+                    if (!AnimTrigger(HashLightPunch)) AnimTrigger(HashPunch);
+                    break;
+                case AttackType.HeavyPunch:
+                    if (!AnimTrigger(HashHeavyPunch)) AnimTrigger(HashPunch);
+                    break;
+                case AttackType.Kick:
+                    AnimTrigger(HashKick);
+                    break;
+                case AttackType.Special:
+                    AnimTrigger(HashSpecial);
+                    break;
+            }
+        }
+
+        IEnumerator DoMeleeAttack(AttackType type)
+        {
+            AttackConfig spec = GetAttackConfig(type);
+            isAttacking   = true;
+            currentAttack = type;
+            SetWalking(false, false);
+            SetBlocking(false);
+            TriggerAttackAnimation(type);
+
+            // 1) Startup
+            attackPhase = AttackPhase.Startup;
+            yield return RunPhaseTimer(spec.startup);
+
+            // 2) Active
+            attackPhase = AttackPhase.Active;
+            var hitTargets = new HashSet<FighterController>();
+            bool indicatorSpawned = false;
+
+            float activeElapsed = 0f;
+            float activeDur     = Mathf.Max(0.02f, spec.active);
+            while (activeElapsed < activeDur)
+            {
+                attackPhaseT = activeElapsed / activeDur;
+                Vector3 hitCenter = GetMeleeHitboxCenter(type, spec);
+
+                if (!indicatorSpawned && usePlaceholderVisuals)
+                {
+                    indicatorSpawned = true;
+                    SpawnHitIndicator(hitCenter, spec.hitHalfExtents, type);
+                }
+
+                CheckMeleeOverlap(hitCenter, spec, hitTargets);
+                activeElapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            // 3) Recovery
+            attackPhase = AttackPhase.Recovery;
+            yield return RunPhaseTimer(spec.recovery);
+
+            attackCooldownTimer = spec.cooldown;
+            isAttacking         = false;
+            currentAttack       = AttackType.None;
+            attackPhase         = AttackPhase.None;
+            attackRoutine       = null;
+        }
+
+        IEnumerator DoSpecialAttack()
+        {
+            isAttacking   = true;
+            currentAttack = AttackType.Special;
+            spCooldown    = specialCooldown;
+            SetWalking(false, false);
+            SetBlocking(false);
+            TriggerAttackAnimation(AttackType.Special);
+
+            // 1) Startup
+            attackPhase = AttackPhase.Startup;
+            yield return RunPhaseTimer(specialStartup);
+
+            // 2) Active — fire projectile
+            attackPhase = AttackPhase.Active;
+            SpawnSpecialProjectile();
+            yield return RunPhaseTimer(specialActive);
+
+            // 3) Recovery
+            attackPhase = AttackPhase.Recovery;
+            yield return RunPhaseTimer(specialRecovery);
+
+            attackCooldownTimer = 0.15f;
+            isAttacking         = false;
+            currentAttack       = AttackType.None;
+            attackPhase         = AttackPhase.None;
+            attackRoutine       = null;
+        }
+
+        IEnumerator RunPhaseTimer(float duration)
+        {
+            if (duration <= 0f) { attackPhaseT = 1f; yield break; }
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                attackPhaseT = elapsed / duration;
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            attackPhaseT = 1f;
+        }
+
+        Vector3 GetMeleeHitboxCenter(AttackType type, AttackConfig spec)
+        {
+            float feetY     = GetFeetWorldY();
+            float standH    = GetStandingWorldHeight();
+            float heightRatio;
+
+            if (crouching)
+                heightRatio = 0.34f;
+            else if (type == AttackType.Kick)
+                heightRatio = 0.48f;
+            else
+                heightRatio = 0.65f;
+
+            float hitY = feetY + standH * heightRatio;
+            return new Vector3(transform.position.x, hitY, transform.position.z) + FacingVector * spec.range;
+        }
+
+        void CheckMeleeOverlap(Vector3 hitCenter, AttackConfig spec, HashSet<FighterController> hitTargets)
+        {
+            Physics.SyncTransforms();
+            Collider[] hits = Physics.OverlapBox(hitCenter, spec.hitHalfExtents, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+            foreach (Collider h in hits)
+            {
+                if (!h || h.transform.root == transform.root) continue;
+                FighterController target = h.GetComponentInParent<FighterController>();
+                if (!target || target == this || hitTargets.Contains(target)) continue;
+
+                hitTargets.Add(target);
+                target.TakeDamage(spec.damage, FacingVector, spec.knockback, spec.hitstun);
+            }
+        }
+
+        void SpawnSpecialProjectile()
+        {
             Transform origin   = EnsureFirePoint();
             Vector3   facing   = FacingVector;
             Vector3   spawnPos = origin.position + facing * muzzleForwardOffset;
-            // The projectile inherits the caster's exact facing direction (rotation + velocity).
-            Quaternion rot     = Quaternion.LookRotation(facing, Vector3.up);
+            if (crouching) spawnPos.y -= GetStandingWorldHeight() * 0.22f;
 
-            var proj = Instantiate(specialPrefab, spawnPos, rot);
-            var rb2  = proj.GetComponent<Rigidbody>();
-            if (rb2) rb2.velocity = facing * 16f;
-            var dmg  = proj.GetComponent<ProjectileDamage>();
-            if (dmg) { dmg.damage = specialDamage; dmg.owner = gameObject; }
+            Quaternion rot  = Quaternion.LookRotation(facing, Vector3.up);
+            GameObject proj = specialPrefab
+                ? Instantiate(specialPrefab, spawnPos, rot)
+                : CreateFallbackProjectile(spawnPos, rot);
+
+            Rigidbody projRb = proj.GetComponent<Rigidbody>();
+            if (projRb) projRb.velocity = facing * specialSpeed;
+
+            ProjectileDamage pd = proj.GetComponent<ProjectileDamage>();
+            if (pd) { pd.damage = specialDamage; pd.owner = gameObject; }
+
             Destroy(proj, 3f);
         }
 
-        /// <summary>Returns firePoint, creating a "FirePoint" child at chest height if none is assigned.</summary>
+        GameObject CreateFallbackProjectile(Vector3 pos, Quaternion rot)
+        {
+            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = "FallbackSpecialProjectile";
+            go.transform.SetPositionAndRotation(pos, rot);
+            go.transform.localScale = Vector3.one * 0.42f;
+
+            var sphereCol = go.GetComponent<SphereCollider>();
+            if (sphereCol) sphereCol.isTrigger = true;
+
+            var projRb = go.AddComponent<Rigidbody>();
+            projRb.useGravity  = false;
+            projRb.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionZ;
+
+            var pd = go.AddComponent<ProjectileDamage>();
+            pd.damage   = specialDamage;
+            pd.spinSelf = false;
+
+            var mr = go.GetComponent<MeshRenderer>();
+            if (mr)
+            {
+                if (!sharedFallbackProjMat)
+                {
+                    Shader s = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Standard");
+                    sharedFallbackProjMat = new Material(s) { color = new Color(1f, 0.85f, 0.25f, 0.92f) };
+                }
+                mr.sharedMaterial = sharedFallbackProjMat;
+            }
+            return go;
+        }
+
+        /// <summary>Returns firePoint, creating a "FirePoint" child at standing chest height if none is assigned.</summary>
         Transform EnsureFirePoint()
         {
             if (firePoint) return firePoint;
@@ -287,77 +818,389 @@ namespace EcclesiaFighters
             var go = new GameObject("FirePoint");
             firePoint = go.transform;
             firePoint.SetParent(transform, false);
-            firePoint.localPosition = new Vector3(0f, ChestLocalHeight(), 0f);
+            firePoint.localPosition = new Vector3(0f, StandingChestLocalHeight(), 0f);
             firePoint.localRotation = Quaternion.identity;
             return firePoint;
         }
 
-        float ChestLocalHeight()
+        float StandingChestLocalHeight()
         {
-            var col = GetComponent<Collider>();
-            if (col)
-            {
-                Bounds b = col.bounds;
-                float worldY = b.min.y + b.size.y * chestHeightRatio;
-                return transform.InverseTransformPoint(new Vector3(transform.position.x, worldY, transform.position.z)).y;
-            }
+            if (capsule) return bottomLocalY + origColliderHeight * chestHeightRatio;
             return fallbackChestHeight / Mathf.Max(0.0001f, Mathf.Abs(transform.lossyScale.y));
         }
 
-        public void TakeDamage(float amount)
+        float GetFeetWorldY()
         {
-            if (dead) return;
-            float final = blocking ? amount * blockReduction : amount;
-            hp = Mathf.Max(0, hp - final);
-            if (hpBar) hpBar.value = hp / maxHP;
-
-            if (!blocking) AnimTrigger(HashHit);
-
-            if (hp <= 0)
-            {
-                dead = true;
-                SetWalking(false);
-                SetBlocking(false);
-                AnimTrigger(HashDeath);
-                OnKO?.Invoke();
-            }
+            if (capsule) return transform.TransformPoint(0f, bottomLocalY, 0f).y;
+            return transform.position.y;
         }
 
-        void FaceOpponent()
+        float GetStandingWorldHeight()
         {
-            if (!opponent) return;
-            float diff = opponent.position.x - transform.position.x;
-            FaceDirection(diff > 0 ? 1 : -1);
-        }
-
-        void OnCollisionEnter(Collision col)
-        {
-            if (col.contacts[0].normal.y > 0.5f) grounded = true;
-        }
-
-        void OnDrawGizmosSelected()
-        {
-            Gizmos.color = Color.red;
-            Vector3 facing = Application.isPlaying ? FacingVector : transform.forward;
-            Gizmos.DrawWireSphere(transform.position + facing * 1.1f + Vector3.up, 0.75f);
+            float scaleY = Mathf.Abs(transform.lossyScale.y);
+            return capsule ? origColliderHeight * scaleY : fallbackChestHeight * 1.4f;
         }
 
         // ══════════════════════════════════════════════════════
-        //  Animator hooks (all guarded: safe with no controller / missing params)
+        //  Damage, Blocking, Hitstun & Knockback
+        // ══════════════════════════════════════════════════════
+        /// <summary>Compatibility overload (used by ProjectileDamage).</summary>
+        public void TakeDamage(float amount)
+        {
+            Vector3 kbDir = opponent
+                ? (transform.position.x >= opponent.position.x ? Vector3.right : Vector3.left)
+                : -FacingVector;
+            TakeDamage(amount, kbDir, 4.0f, 0.24f);
+        }
+
+        public void TakeDamage(float amount, Vector3 knockbackDir, float knockbackForce, float hitstunDuration)
+        {
+            if (dead || invulnTimer > 0f) return;
+
+            bool blockedHit = blocking || (grounded && !isAttacking && hitstunTimer <= 0f && holdingAway);
+            float finalDmg  = blockedHit ? amount * blockReduction : amount;
+
+            hp = Mathf.Max(0f, hp - finalDmg);
+            if (hpBar) hpBar.value = hp / maxHP;
+
+            float dirX = Mathf.Abs(knockbackDir.x) > 0.01f ? Mathf.Sign(knockbackDir.x) : -FacingDir;
+            float appliedKB = blockedHit ? knockbackForce * blockKnockbackScale : knockbackForce;
+            if (rb && appliedKB > 0f)
+            {
+                Vector3 v = rb.velocity;
+                v.x = dirX * appliedKB;
+                rb.velocity = v;
+            }
+
+            if (hp <= 0f)
+            {
+                dead = true;
+                StopActiveAttack();
+                hitstunTimer = 0f;
+                SetWalking(false, false);
+                SetCrouching(false);
+                SetBlocking(false);
+                RestoreCollider();
+                AnimTrigger(HashDeath);
+                OnKO?.Invoke();
+                return;
+            }
+
+            if (blockedHit)
+            {
+                blockFlashTimer = 0.16f;
+                invulnTimer     = 0.08f;
+            }
+            else
+            {
+                StopActiveAttack();
+                SetWalking(false, false);
+                SetBlocking(false);
+                hitstunTimer  = Mathf.Max(hitstunTimer, hitstunDuration);
+                invulnTimer   = invulnerabilityDuration;
+                hitFlashTimer = Mathf.Max(0.18f, hitstunDuration);
+                AnimTrigger(HashHit);
+            }
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  Collider & Grounding
+        // ══════════════════════════════════════════════════════
+        void ApplyColliderHeight(bool crouchState)
+        {
+            if (!capsule) return;
+            if (crouchState)
+            {
+                float targetH = Mathf.Max(capsule.radius * 2f, origColliderHeight * crouchHeightRatio);
+                capsule.height = targetH;
+                capsule.center = new Vector3(origColliderCenter.x, bottomLocalY + targetH * 0.5f, origColliderCenter.z);
+            }
+            else
+            {
+                RestoreCollider();
+            }
+        }
+
+        void RestoreCollider()
+        {
+            if (!capsule) return;
+            capsule.height = origColliderHeight;
+            capsule.center = origColliderCenter;
+        }
+
+        bool CheckFeetGrounded()
+        {
+            if (rb && rb.velocity.y > 0.25f) return false;
+            Vector3 feetPos = new Vector3(transform.position.x, GetFeetWorldY() + 0.14f, transform.position.z);
+            Collider[] hits = Physics.OverlapSphere(feetPos, 0.22f, ~0, QueryTriggerInteraction.Ignore);
+            foreach (Collider c in hits)
+                if (c && c.transform.root != transform.root) return true;
+            return false;
+        }
+
+        void RecordGroundContact(Collision col)
+        {
+            if (col.transform.root == transform.root) return;
+            for (int i = 0; i < col.contactCount; i++)
+            {
+                if (col.GetContact(i).normal.y > 0.5f)
+                {
+                    lastGroundContactTime = Time.time;
+                    if (jumpGraceTimer <= 0f) grounded = true;
+                    return;
+                }
+            }
+        }
+
+        void OnCollisionEnter(Collision col) => RecordGroundContact(col);
+        void OnCollisionStay(Collision col)  => RecordGroundContact(col);
+
+        void OnDrawGizmosSelected()
+        {
+            Gizmos.color = new Color(1f, 0.25f, 0.2f, 0.75f);
+            Vector3 facing = Application.isPlaying ? FacingVector : transform.forward;
+            float standH = capsule ? capsule.height : fallbackChestHeight * 1.4f;
+            float feetY  = capsule ? transform.TransformPoint(0f, capsule.center.y - capsule.height * 0.5f, 0f).y : transform.position.y;
+            Vector3 center = new Vector3(transform.position.x, feetY + standH * 0.65f, transform.position.z) + facing * lightPunch.range;
+            Gizmos.DrawWireCube(center, lightPunch.hitHalfExtents * 2f);
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  Toggleable Placeholder Visual Feedback
+        // ══════════════════════════════════════════════════════
+        void CacheVisuals()
+        {
+            propBlock = new MaterialPropertyBlock();
+
+            if (!visualRoot)
+            {
+                Transform meshChild = transform.Find("Mesh_0");
+                if (meshChild) visualRoot = meshChild;
+                else
+                {
+                    foreach (Renderer r in GetComponentsInChildren<Renderer>(true))
+                    {
+                        if (r.transform != transform) { visualRoot = r.transform; break; }
+                    }
+                }
+            }
+
+            hasVisualRoot = visualRoot != null && visualRoot != transform;
+            if (hasVisualRoot)
+            {
+                baseVisualLocalPos   = visualRoot.localPosition;
+                baseVisualLocalRot   = visualRoot.localRotation;
+                baseVisualLocalScale = visualRoot.localScale;
+
+                Vector3 childUp = Quaternion.Inverse(baseVisualLocalRot) * Vector3.up;
+                visualUpWeights = new Vector3(Mathf.Abs(childUp.x), Mathf.Abs(childUp.y), Mathf.Abs(childUp.z));
+            }
+
+            cachedRenderers    = GetComponentsInChildren<Renderer>(true);
+            baseRendererColors = new Color[cachedRenderers.Length];
+            for (int i = 0; i < cachedRenderers.Length; i++)
+            {
+                Material m = cachedRenderers[i] ? cachedRenderers[i].sharedMaterial : null;
+                if (m && m.HasProperty(ShaderColorId))          baseRendererColors[i] = m.GetColor(ShaderColorId);
+                else if (m && m.HasProperty(ShaderBaseColorId)) baseRendererColors[i] = m.GetColor(ShaderBaseColorId);
+                else                                            baseRendererColors[i] = Color.white;
+            }
+        }
+
+        void UpdatePlaceholderVisuals()
+        {
+            if (!usePlaceholderVisuals)
+            {
+                if (placeholderWasActive) ResetVisualPose();
+                return;
+            }
+            placeholderWasActive = true;
+
+            // 1) Pose transform (crouch squash, attack tilt/lunge, hitstun/KO lean)
+            if (hasVisualRoot)
+            {
+                float targetSquash = crouching ? 0.68f : 1f;
+                float targetTilt   = 0f;
+                float targetLunge  = 0f;
+
+                if (dead)
+                {
+                    targetSquash = 0.85f;
+                    targetTilt   = -78f;
+                    targetLunge  = -0.45f;
+                }
+                else if (hitstunTimer > 0f)
+                {
+                    targetTilt  = -18f;
+                    targetLunge = -0.14f;
+                }
+                else if (isAttacking)
+                {
+                    ComputeAttackPose(out targetTilt, out targetLunge);
+                }
+                else if (blocking)
+                {
+                    targetTilt  = -8f;
+                    targetLunge = -0.06f;
+                }
+
+                float blend = 1f - Mathf.Exp(-20f * Time.deltaTime);
+                currentVisualSquash = Mathf.Lerp(currentVisualSquash, targetSquash, blend);
+                currentVisualTilt   = Mathf.Lerp(currentVisualTilt,   targetTilt,   blend);
+                currentVisualLunge  = Mathf.Lerp(currentVisualLunge,  targetLunge,  blend);
+
+                Vector3 scaleFactor = Vector3.one + visualUpWeights * (currentVisualSquash - 1f);
+                visualRoot.localScale = Vector3.Scale(baseVisualLocalScale, scaleFactor);
+
+                Vector3 localFwd = transform.InverseTransformVector(FacingVector).normalized;
+                Vector3 tiltAxis = Vector3.Cross(Vector3.up, localFwd);
+                if (tiltAxis.sqrMagnitude < 0.001f) tiltAxis = Vector3.right;
+
+                visualRoot.localRotation = Quaternion.AngleAxis(currentVisualTilt, tiltAxis.normalized) * baseVisualLocalRot;
+
+                float footPivotDrop = (1f - currentVisualSquash) * Mathf.Max(0f, baseVisualLocalPos.y - bottomLocalY);
+                if (dead) footPivotDrop += 0.45f;
+                visualRoot.localPosition = baseVisualLocalPos + localFwd * currentVisualLunge - Vector3.up * footPivotDrop;
+            }
+
+            // 2) Tint / flash for hit and block
+            if (hitFlashTimer > 0f)
+            {
+                float pulse = Mathf.PingPong(Time.time * 24f, 1f);
+                Color hitTint = Color.Lerp(new Color(1f, 0.22f, 0.22f, 1f), Color.white, pulse * 0.45f);
+                ApplyRendererTint(hitTint, 0.85f);
+            }
+            else if (blocking || blockFlashTimer > 0f)
+            {
+                float strength = blockFlashTimer > 0f ? 0.80f : 0.48f;
+                ApplyRendererTint(new Color(0.32f, 0.72f, 1f, 1f), strength);
+            }
+            else
+            {
+                ClearRendererTint();
+            }
+        }
+
+        void ComputeAttackPose(out float tiltDeg, out float lungeMeters)
+        {
+            float maxTilt  = currentAttack == AttackType.HeavyPunch ? 24f : (currentAttack == AttackType.Kick ? 22f : 16f);
+            float maxLunge = currentAttack == AttackType.HeavyPunch ? 0.36f : (currentAttack == AttackType.Kick ? 0.40f : 0.24f);
+            if (currentAttack == AttackType.Special) { maxTilt = 14f; maxLunge = 0.20f; }
+
+            switch (attackPhase)
+            {
+                case AttackPhase.Startup:
+                    tiltDeg     = Mathf.Lerp(0f, -8f, attackPhaseT);
+                    lungeMeters = Mathf.Lerp(0f, -0.06f, attackPhaseT);
+                    break;
+                case AttackPhase.Active:
+                    tiltDeg     = maxTilt;
+                    lungeMeters = maxLunge;
+                    break;
+                case AttackPhase.Recovery:
+                    tiltDeg     = Mathf.Lerp(maxTilt,  0f, attackPhaseT);
+                    lungeMeters = Mathf.Lerp(maxLunge, 0f, attackPhaseT);
+                    break;
+                default:
+                    tiltDeg = 0f; lungeMeters = 0f;
+                    break;
+            }
+        }
+
+        void ApplyRendererTint(Color tint, float strength)
+        {
+            if (cachedRenderers == null) return;
+            for (int i = 0; i < cachedRenderers.Length; i++)
+            {
+                Renderer r = cachedRenderers[i];
+                if (!r) continue;
+                Color c = Color.Lerp(baseRendererColors[i], tint, strength);
+                r.GetPropertyBlock(propBlock);
+                propBlock.SetColor(ShaderColorId,     c);
+                propBlock.SetColor(ShaderBaseColorId, c);
+                r.SetPropertyBlock(propBlock);
+            }
+        }
+
+        void ClearRendererTint()
+        {
+            if (cachedRenderers == null) return;
+            for (int i = 0; i < cachedRenderers.Length; i++)
+                if (cachedRenderers[i]) cachedRenderers[i].SetPropertyBlock(null);
+        }
+
+        void ResetVisualPose()
+        {
+            currentVisualSquash  = 1f;
+            currentVisualTilt    = 0f;
+            currentVisualLunge   = 0f;
+            placeholderWasActive = false;
+
+            if (hasVisualRoot)
+            {
+                visualRoot.localPosition = baseVisualLocalPos;
+                visualRoot.localRotation = baseVisualLocalRot;
+                visualRoot.localScale    = baseVisualLocalScale;
+            }
+            ClearRendererTint();
+        }
+
+        void SpawnHitIndicator(Vector3 center, Vector3 halfExtents, AttackType type)
+        {
+            GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            sphere.name = "HitIndicator_" + type;
+            Collider c = sphere.GetComponent<Collider>();
+            if (c) Destroy(c);
+
+            sphere.transform.position   = center;
+            sphere.transform.localScale = new Vector3(halfExtents.x * 2f, halfExtents.y * 2f, halfExtents.x * 1.4f);
+
+            var mr = sphere.GetComponent<MeshRenderer>();
+            if (mr)
+            {
+                if (!sharedHitIndicatorMat)
+                {
+                    Shader s = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Standard");
+                    sharedHitIndicatorMat = new Material(s);
+                }
+                mr.sharedMaterial = sharedHitIndicatorMat;
+
+                Color col = type == AttackType.HeavyPunch
+                    ? new Color(1f, 0.35f, 0.15f, 0.42f)
+                    : (type == AttackType.Kick
+                        ? new Color(0.35f, 0.85f, 1f, 0.40f)
+                        : new Color(1f, 0.82f, 0.2f, 0.38f));
+
+                var pb = new MaterialPropertyBlock();
+                pb.SetColor(ShaderColorId,     col);
+                pb.SetColor(ShaderBaseColorId, col);
+                mr.SetPropertyBlock(pb);
+            }
+
+            Destroy(sphere, 0.14f);
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  Animator hooks (all guarded: zero warnings when unassigned)
         // ══════════════════════════════════════════════════════
         void CacheAnimator()
         {
             animParams.Clear();
             animReady = anim != null && anim.runtimeAnimatorController != null;
             if (!animReady) return;
-            foreach (var p in anim.parameters) animParams[p.nameHash] = p.type;
+            foreach (AnimatorControllerParameter p in anim.parameters)
+                animParams[p.nameHash] = p.type;
         }
 
-        void AnimTrigger(int hash)
+        bool AnimTrigger(int hash)
         {
-            if (!animReady) return;
+            if (!animReady) return false;
             if (animParams.TryGetValue(hash, out var t) && t == AnimatorControllerParameterType.Trigger)
+            {
                 anim.SetTrigger(hash);
+                return true;
+            }
+            return false;
         }
 
         void AnimBool(int hash, bool value)
@@ -367,11 +1210,26 @@ namespace EcclesiaFighters
                 anim.SetBool(hash, value);
         }
 
-        void SetWalking(bool v)
+        void SetWalking(bool forward, bool backward)
         {
-            if (walking == v) return;
-            walking = v;
-            AnimBool(HashWalking, v);
+            if (walkingForward != forward)
+            {
+                walkingForward = forward;
+                AnimBool(HashWalking, forward);
+            }
+            if (walkingBackward != backward)
+            {
+                walkingBackward = backward;
+                AnimBool(HashWalkingBack, backward);
+            }
+        }
+
+        void SetCrouching(bool v)
+        {
+            if (crouching == v) return;
+            crouching = v;
+            ApplyColliderHeight(v);
+            AnimBool(HashCrouching, v);
         }
 
         void SetBlocking(bool v)
@@ -381,12 +1239,14 @@ namespace EcclesiaFighters
             AnimBool(HashBlocking, v);
         }
 
-        /// <summary>Clears pending triggers and returns the Animator to Idle (called on every round reset).</summary>
+        /// <summary>Clears pending triggers and returns the Animator to Idle on round reset.</summary>
         void ResetAnimator()
         {
             if (!animReady) return;
-            AnimBool(HashWalking, false);
-            AnimBool(HashBlocking, false);
+            AnimBool(HashWalking,     false);
+            AnimBool(HashWalkingBack, false);
+            AnimBool(HashCrouching,   false);
+            AnimBool(HashBlocking,    false);
             foreach (var kv in animParams)
                 if (kv.Value == AnimatorControllerParameterType.Trigger) anim.ResetTrigger(kv.Key);
 
