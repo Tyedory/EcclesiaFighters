@@ -167,7 +167,7 @@ namespace EcclesiaFighters.EditorTools
 
             // Graphics — one button per Quality level defined in the project
             Text gl = AddText(box.rectTransform, "GraphicsLabel", "QUALIDADE GRÁFICA", 28, Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
-            Region(gl.rectTransform, 0.06f, 0.82f, 0.60f, 0.88f);
+            Region(gl.rectTransform, 0.06f, 0.85f, 0.60f, 0.90f);
             string[] qn = QualitySettings.names;
             var qBtns = new Button[qn.Length];
             float qw = 0.88f / Mathf.Max(1, qn.Length);
@@ -175,25 +175,37 @@ namespace EcclesiaFighters.EditorTools
             {
                 qBtns[i] = AddButton(box.rectTransform, "Quality_" + qn[i], qn[i].ToUpper(), 24);
                 float x0 = 0.06f + i * qw;
-                Region(qBtns[i].GetComponent<RectTransform>(), x0 + 0.005f, 0.72f, x0 + qw - 0.005f, 0.81f);
+                Region(qBtns[i].GetComponent<RectTransform>(), x0 + 0.005f, 0.77f, x0 + qw - 0.005f, 0.84f);
                 UnityEventTools.AddIntPersistentListener(qBtns[i].onClick, settings.SetQuality, i);
             }
 
+            // Resolution selector:  RESOLUÇÃO   [<]  1920 x 1080  [>]
+            Text rl = AddText(box.rectTransform, "ResolutionLabel", "RESOLUÇÃO", 28, Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            Region(rl.rectTransform, 0.06f, 0.68f, 0.32f, 0.75f);
+            Button resPrev = AddButton(box.rectTransform, "Btn_ResPrev", "<", 32);
+            Region(resPrev.GetComponent<RectTransform>(), 0.34f, 0.68f, 0.42f, 0.75f);
+            Text resText = AddText(box.rectTransform, "ResolutionValue", "1920 x 1080", 30, Parchment, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(resText.rectTransform, 0.43f, 0.68f, 0.85f, 0.75f);
+            Button resNext = AddButton(box.rectTransform, "Btn_ResNext", ">", 32);
+            Region(resNext.GetComponent<RectTransform>(), 0.86f, 0.68f, 0.94f, 0.75f);
+            UnityEventTools.AddPersistentListener(resPrev.onClick, settings.PrevResolution);
+            UnityEventTools.AddPersistentListener(resNext.onClick, settings.NextResolution);
+
             Toggle vsync = AddToggle(box.rectTransform, "VSyncToggle", "V-SYNC");
-            Region(vsync.GetComponent<RectTransform>(), 0.06f, 0.60f, 0.48f, 0.69f);
+            Region(vsync.GetComponent<RectTransform>(), 0.06f, 0.59f, 0.48f, 0.66f);
             UnityEventTools.AddPersistentListener<bool>(vsync.onValueChanged, settings.SetVSync);
             Toggle full = AddToggle(box.rectTransform, "FullscreenToggle", "TELA CHEIA");
-            Region(full.GetComponent<RectTransform>(), 0.52f, 0.60f, 0.94f, 0.69f);
+            Region(full.GetComponent<RectTransform>(), 0.52f, 0.59f, 0.94f, 0.66f);
             UnityEventTools.AddPersistentListener<bool>(full.onValueChanged, settings.SetFullscreen);
 
             // Volume sliders
             Text vl = AddText(box.rectTransform, "VolumeLabel", "VOLUME", 28, Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
-            Region(vl.rectTransform, 0.06f, 0.52f, 0.60f, 0.58f);
+            Region(vl.rectTransform, 0.06f, 0.52f, 0.60f, 0.57f);
             string[] names = { "MASTER", "MÚSICA", "EFEITOS", "VOZES" };
             var sliders = new Slider[names.Length];
             for (int i = 0; i < names.Length; i++)
             {
-                float y = 0.43f - i * 0.095f;
+                float y = 0.43f - i * 0.085f;
                 Text l = AddText(box.rectTransform, names[i] + "Label", names[i], 26, Parchment, TextAnchor.MiddleLeft);
                 Region(l.rectTransform, 0.06f, y, 0.30f, y + 0.07f);
                 sliders[i] = AddSlider(box.rectTransform, names[i] + "Slider");
@@ -204,14 +216,24 @@ namespace EcclesiaFighters.EditorTools
             UnityEventTools.AddPersistentListener<float>(sliders[2].onValueChanged, settings.SetSFXVol);
             UnityEventTools.AddPersistentListener<float>(sliders[3].onValueChanged, settings.SetVoiceVol);
 
-            Button back = AddButton(box.rectTransform, "Btn_Voltar", "VOLTAR", 34);
-            Region(back.GetComponent<RectTransform>(), 0.35f, 0.03f, 0.65f, 0.11f);
-            UnityEventTools.AddPersistentListener(back.onClick, title.ReturnToTitle);
+            Button reset = AddButton(box.rectTransform, "Btn_Reset", "RESET", 30);
+            Region(reset.GetComponent<RectTransform>(), 0.06f, 0.03f, 0.32f, 0.11f);
+            UnityEventTools.AddPersistentListener(reset.onClick, settings.ResetToDefaults);
+            Button apply = AddButton(box.rectTransform, "Btn_Aplicar", "APLICAR", 30);
+            Region(apply.GetComponent<RectTransform>(), 0.37f, 0.03f, 0.63f, 0.11f);
+            UnityEventTools.AddPersistentListener(apply.onClick, settings.Apply);
+            Button back = AddButton(box.rectTransform, "Btn_Voltar", "VOLTAR", 30);
+            Region(back.GetComponent<RectTransform>(), 0.68f, 0.03f, 0.94f, 0.11f);
+            UnityEventTools.AddPersistentListener(back.onClick, settings.Discard);          // 1) discard unapplied changes
+            UnityEventTools.AddPersistentListener(back.onClick, title.ReturnToTitle);       // 2) close the panel
 
             // SettingsManager wiring (audioMixer stays empty: assign one with exposed Vol_Master/Music/SFX/Voice)
             settings.qualityButtons  = qBtns;
             settings.vsyncToggle     = vsync;
             settings.fullscreenToggle= full;
+            settings.prevResolutionButton = resPrev;
+            settings.nextResolutionButton = resNext;
+            settings.resolutionLabel      = resText;
             settings.masterSlider    = sliders[0];
             settings.musicSlider     = sliders[1];
             settings.sfxSlider       = sliders[2];
