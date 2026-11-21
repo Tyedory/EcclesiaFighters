@@ -46,6 +46,14 @@ namespace EcclesiaFighters
         public float roundTime     = 99f;
         public int   roundsToWin   = 2;             // best-of-3 (first to 2)
 
+        [Header("Dev / Training Mode")]
+        public bool allowDevMode = true;
+        [HideInInspector] public bool freezeTimer = false;
+
+        public FighterController FighterA      => ctrlA;
+        public FighterController FighterB      => ctrlB;
+        public bool              IsRoundActive => roundActive;
+
         // ── Runtime ───────────────────────────────────────────
         private FighterController ctrlA, ctrlB;
         private GameObject objA, objB;
@@ -53,6 +61,9 @@ namespace EcclesiaFighters
         private bool   roundActive;
         private int    round = 1;
         private int    wA = 0, wB = 0;
+        private Coroutine roundResultRoutine;
+        private Coroutine gameOverRoutine;
+        private Coroutine showCenterRoutine;
 
         static readonly string[] NAMES = { "Santo Agostinho", "Karl Marx" };
 
@@ -101,6 +112,12 @@ namespace EcclesiaFighters
             if (fighterCamera && objA && objB)
                 fighterCamera.SetTargets(objA.transform, objB.transform, snapImmediate: true);
 
+            if (allowDevMode)
+            {
+                var dev = GetComponent<FightDevMode>() ?? gameObject.AddComponent<FightDevMode>();
+                dev.Initialize(this);
+            }
+
             // Intro
             yield return RoundIntro();
             StartRound();
@@ -145,16 +162,16 @@ namespace EcclesiaFighters
         void Update()
         {
             if (!roundActive) return;
-            timer -= Time.deltaTime;
+            if (!freezeTimer) timer -= Time.deltaTime;
             if (timerText) timerText.text = Mathf.CeilToInt(Mathf.Max(timer,0)).ToString();
-            if (timer <= 0) EndRound(ctrlA && ctrlB ? ctrlA.CurrentHP >= ctrlB.CurrentHP : true);
+            if (!freezeTimer && timer <= 0) EndRound(ctrlA && ctrlB ? ctrlA.CurrentHP >= ctrlB.CurrentHP : true);
         }
 
         IEnumerator RoundIntro()
         {
             hud.alpha = 0;
-            yield return ShowCenter($"ROUND {round}", 1.2f, 1f);
-            yield return ShowCenter("FIGHT!", 0.7f, 1.5f);
+            yield return (showCenterRoutine = StartCoroutine(ShowCenter($"ROUND {round}", 1.2f, 1f)));
+            yield return (showCenterRoutine = StartCoroutine(ShowCenter("FIGHT!", 0.7f, 1.5f)));
             yield return FadeFloat(v => hud.alpha = v, 0, 1, 0.3f);
         }
 
@@ -166,19 +183,19 @@ namespace EcclesiaFighters
             ctrlB?.SetInputEnabled(false);
             if (aWins) wA++; else wB++;
             UpdateWinIcons();
-            StartCoroutine(RoundResult(aWins));
+            roundResultRoutine = StartCoroutine(RoundResult(aWins));
         }
 
         IEnumerator RoundResult(bool aWins)
         {
-            yield return ShowCenter("K.O.", 1.1f, 1.2f);
+            yield return (showCenterRoutine = StartCoroutine(ShowCenter("K.O.", 1.1f, 1.2f)));
             string winnerName = aWins ? (ctrlA ? ctrlA.characterName : "Jogador A")
                                       : (ctrlB ? ctrlB.characterName : "Karl Marx");
-            yield return ShowCenter(winnerName.ToUpper() + " VENCE!", 1.8f, 1f);
+            yield return (showCenterRoutine = StartCoroutine(ShowCenter(winnerName.ToUpper() + " VENCE!", 1.8f, 1f)));
             yield return new WaitForSeconds(0.5f);
 
             if (wA >= roundsToWin || wB >= roundsToWin)
-                StartCoroutine(GameOver(aWins));
+                gameOverRoutine = StartCoroutine(GameOver(aWins));
             else
             {
                 round++;
@@ -193,9 +210,66 @@ namespace EcclesiaFighters
         IEnumerator GameOver(bool aWins)
         {
             string winner = aWins ? (ctrlA ? ctrlA.characterName : "Agostinho") : "Karl Marx";
-            yield return ShowCenter(winner.ToUpper() + "\nVITÓRIA TOTAL!", 3f, 1.2f);
+            yield return (showCenterRoutine = StartCoroutine(ShowCenter(winner.ToUpper() + "\nVITÓRIA TOTAL!", 3f, 1.2f)));
             yield return FadeFloat(v => fadeOverlay.color = new Color(0,0,0,v), 0, 1, 0.6f);
             SceneManager.LoadScene("TitleScreen");
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  Dev / Training Mode Helpers
+        // ══════════════════════════════════════════════════════
+        public void DevFullHealBoth()
+        {
+            ctrlA?.FullHeal();
+            ctrlB?.FullHeal();
+        }
+
+        public void DevResetPositionsAndRevive()
+        {
+            if (showCenterRoutine  != null) { StopCoroutine(showCenterRoutine);  showCenterRoutine  = null; }
+            if (roundResultRoutine != null) { StopCoroutine(roundResultRoutine); roundResultRoutine = null; }
+            if (gameOverRoutine    != null) { StopCoroutine(gameOverRoutine);    gameOverRoutine    = null; }
+
+            if (centerText)  centerText.gameObject.SetActive(false);
+            if (hud)         hud.alpha = 1f;
+            if (fadeOverlay) fadeOverlay.color = new Color(0f, 0f, 0f, 0f);
+
+            if (timer <= 0f) timer = roundTime;
+            roundActive = true;
+
+            ctrlA?.DevReviveAndResetIdle();
+            ctrlB?.DevReviveAndResetIdle();
+
+            if (objA && spawnA)
+            {
+                var rbA = objA.GetComponent<Rigidbody>();
+                if (rbA) rbA.velocity = Vector3.zero;
+                objA.transform.SetPositionAndRotation(spawnA.position, Quaternion.Euler(0f, 90f, 0f));
+            }
+            if (objB && spawnB)
+            {
+                var rbB = objB.GetComponent<Rigidbody>();
+                if (rbB) rbB.velocity = Vector3.zero;
+                objB.transform.SetPositionAndRotation(spawnB.position, Quaternion.Euler(0f, -90f, 0f));
+            }
+
+            ctrlA?.SetInputEnabled(true);
+            ctrlB?.SetInputEnabled(true);
+            fighterCamera?.SnapToTargets();
+        }
+
+        public void DevInstaKill(bool killPlayerA)
+        {
+            FighterController target = killPlayerA ? ctrlA : ctrlB;
+            if (!target || target.IsDead) return;
+
+            if (showCenterRoutine  != null) { StopCoroutine(showCenterRoutine);  showCenterRoutine  = null; }
+            if (roundResultRoutine != null) { StopCoroutine(roundResultRoutine); roundResultRoutine = null; }
+            if (gameOverRoutine    != null) { StopCoroutine(gameOverRoutine);    gameOverRoutine    = null; }
+
+            roundActive       = true;
+            target.infiniteHP = false;
+            target.DevForceKill(triggerKOEvent: true);
         }
 
         void UpdateWinIcons()

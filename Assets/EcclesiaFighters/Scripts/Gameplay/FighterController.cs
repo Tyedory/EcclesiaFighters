@@ -138,23 +138,31 @@ namespace EcclesiaFighters
         public bool      usePlaceholderVisuals = true;
         public Transform visualRoot;
 
+        // ── Dev / Training Flags ──────────────────────────────
+        [Header("Dev / Training Flags")]
+        public bool infiniteHP = false;
+        [HideInInspector] public bool forceShowMoveHitboxes = false;
+
         // ── References ────────────────────────────────────────
         [HideInInspector] public Transform opponent;
         [HideInInspector] public Slider    hpBar;
         [HideInInspector] public Action    OnKO;
 
         // ── Public state (read by FighterAI & HUD) ────────────
-        public float      CurrentHP     => hp;
-        public float      HPRatio       => hp / maxHP;
-        public bool       IsGrounded    => grounded;
-        public bool       IsBlocking    => blocking;
-        public bool       IsCrouching   => crouching;
-        public bool       IsAttacking   => isAttacking;
-        public bool       IsInHitstun   => hitstunTimer > 0f;
-        public bool       InputEnabled  => inputEnabled;
-        public AttackType CurrentAttack => currentAttack;
-        public bool       SpecialReady  => spCooldown <= 0f;
-        public bool       IsDead        => dead;
+        public float      CurrentHP             => hp;
+        public float      HPRatio               => hp / maxHP;
+        public bool       IsGrounded            => grounded;
+        public bool       IsBlocking            => blocking;
+        public bool       IsCrouching           => crouching;
+        public bool       IsAttacking           => isAttacking;
+        public bool       IsInHitstun           => hitstunTimer > 0f;
+        public bool       InputEnabled          => inputEnabled;
+        public AttackType CurrentAttack         => currentAttack;
+        public bool       SpecialReady          => spCooldown <= 0f;
+        public bool       IsDead                => dead;
+        public bool       DevCrouchActive       => devForceCrouch;
+        public bool       DevBlockActive        => devForceBlock;
+        public bool       HasAnimatorController => animReady;
 
         /// <summary>+1 = facing right (+X), -1 = facing left (-X). Derived from transform so it cannot desync.</summary>
         public int FacingDir => facingMode == FacingMode.FlipScaleX
@@ -194,6 +202,9 @@ namespace EcclesiaFighters
         bool grounded = true, blocking, crouching, dead, inputEnabled;
         bool walkingForward, walkingBackward;
         bool holdingAway, aiWantsBlock, aiWantsCrouch;
+        bool devForceCrouch, devForceBlock, devWalkJustEnded;
+        float devWalkTimer;
+        int devWalkRelDir;
         bool isAttacking;
 
         AttackType  currentAttack = AttackType.None;
@@ -272,6 +283,10 @@ namespace EcclesiaFighters
             holdingAway         = false;
             aiWantsBlock        = false;
             aiWantsCrouch       = false;
+            devForceCrouch      = false;
+            devForceBlock       = false;
+            devWalkJustEnded    = false;
+            devWalkTimer        = 0f;
 
             if (rb) rb.velocity = Vector3.zero;
 
@@ -290,9 +305,13 @@ namespace EcclesiaFighters
             inputEnabled = v;
             if (!v)
             {
-                holdingAway   = false;
-                aiWantsBlock  = false;
-                aiWantsCrouch = false;
+                holdingAway      = false;
+                aiWantsBlock     = false;
+                aiWantsCrouch    = false;
+                devForceCrouch   = false;
+                devForceBlock    = false;
+                devWalkJustEnded = false;
+                devWalkTimer     = 0f;
                 SetWalking(false, false);
                 SetCrouching(false);
                 SetBlocking(false);
@@ -394,6 +413,16 @@ namespace EcclesiaFighters
             if (blockFlashTimer     > 0f) blockFlashTimer     -= dt;
             if (jumpGraceTimer      > 0f) jumpGraceTimer      -= dt;
 
+            if (devWalkTimer > 0f)
+            {
+                devWalkTimer -= dt;
+                if (devWalkTimer <= 0f)
+                {
+                    devWalkTimer     = 0f;
+                    devWalkJustEnded = true;
+                }
+            }
+
             if (hitstunTimer > 0f)
             {
                 hitstunTimer -= dt;
@@ -449,32 +478,64 @@ namespace EcclesiaFighters
                 SetCrouching(false);
                 SetBlocking(false);
                 SetWalking(false, false);
+                devWalkJustEnded = false;
                 return;
             }
 
-            SetCrouching(aiWantsCrouch && !isAttacking);
-            SetBlocking(aiWantsBlock && !isAttacking);
-            if (isAttacking || blocking) SetWalking(false, false);
+            SetCrouching((aiWantsCrouch || devForceCrouch) && !isAttacking);
+            SetBlocking((aiWantsBlock || devForceBlock) && !isAttacking);
+            if (isAttacking || blocking)
+            {
+                SetWalking(false, false);
+            }
+            else if (devWalkTimer > 0f)
+            {
+                Move(devWalkRelDir * FacingDir);
+            }
+            else if (devWalkJustEnded)
+            {
+                SetWalking(false, false);
+            }
+            devWalkJustEnded = false;
         }
 
         void HandlePlayerInput()
         {
             if (hitstunTimer > 0f)
             {
-                holdingAway = false;
+                holdingAway      = false;
+                devWalkJustEnded = false;
                 SetWalking(false, false);
                 SetCrouching(false);
                 SetBlocking(false);
                 return;
             }
 
+            if (Input.GetKeyDown(keyCrouch) || Input.GetKeyDown(KeyCode.DownArrow) ||
+                Input.GetKeyDown(keyJump)   || Input.GetKeyDown(keyJumpAlt) || Input.GetKeyDown(KeyCode.UpArrow))
+                devForceCrouch = false;
+
+            if (Input.GetKeyDown(keyBlock) || Input.GetKeyDown(KeyCode.RightShift))
+                devForceBlock = false;
+
             // Read directional & posture inputs
             float dir = 0f;
             if (Input.GetKey(keyLeft)  || Input.GetKey(KeyCode.LeftArrow))  dir -= 1f;
             if (Input.GetKey(keyRight) || Input.GetKey(KeyCode.RightArrow)) dir += 1f;
 
-            bool crouchHeld = (Input.GetKey(keyCrouch) || Input.GetKey(KeyCode.DownArrow)) && grounded;
-            bool shiftBlock = (Input.GetKey(keyBlock)  || Input.GetKey(KeyCode.RightShift)) && grounded;
+            if (!Mathf.Approximately(dir, 0f))
+            {
+                devWalkTimer     = 0f;
+                devWalkJustEnded = false;
+            }
+            else if (devWalkTimer > 0f)
+            {
+                dir = devWalkRelDir * FacingDir;
+            }
+            devWalkJustEnded = false;
+
+            bool crouchHeld = (Input.GetKey(keyCrouch) || Input.GetKey(KeyCode.DownArrow) || devForceCrouch) && grounded;
+            bool shiftBlock = (Input.GetKey(keyBlock)  || Input.GetKey(KeyCode.RightShift) || devForceBlock) && grounded;
             holdingAway     = grounded && dir != 0f && (dir * FacingDir < 0f);
 
             if (!isAttacking) SetCrouching(crouchHeld);
@@ -659,10 +720,10 @@ namespace EcclesiaFighters
                 attackPhaseT = activeElapsed / activeDur;
                 Vector3 hitCenter = GetMeleeHitboxCenter(type, spec);
 
-                if (!indicatorSpawned && usePlaceholderVisuals && !animReady)
+                if (!indicatorSpawned && (forceShowMoveHitboxes || (usePlaceholderVisuals && !animReady)))
                 {
                     indicatorSpawned = true;
-                    SpawnHitIndicator(hitCenter, spec.hitHalfExtents, type);
+                    SpawnHitIndicator(hitCenter, spec.hitHalfExtents, type, forceShowMoveHitboxes);
                 }
 
                 CheckMeleeOverlap(hitCenter, spec, hitTargets);
@@ -860,7 +921,7 @@ namespace EcclesiaFighters
             bool blockedHit = blocking || (grounded && !isAttacking && hitstunTimer <= 0f && holdingAway);
             float finalDmg  = blockedHit ? amount * blockReduction : amount;
 
-            hp = Mathf.Max(0f, hp - finalDmg);
+            hp = infiniteHP ? maxHP : Mathf.Max(0f, hp - finalDmg);
             if (hpBar) hpBar.value = hp / maxHP;
 
             float dirX = Mathf.Abs(knockbackDir.x) > 0.01f ? Mathf.Sign(knockbackDir.x) : -FacingDir;
@@ -872,7 +933,7 @@ namespace EcclesiaFighters
                 rb.velocity = v;
             }
 
-            if (hp <= 0f)
+            if (hp <= 0f && !infiniteHP)
             {
                 dead = true;
                 StopActiveAttack();
@@ -1157,31 +1218,48 @@ namespace EcclesiaFighters
             ClearRendererTint();
         }
 
-        void SpawnHitIndicator(Vector3 center, Vector3 halfExtents, AttackType type)
+        void SpawnHitIndicator(Vector3 center, Vector3 halfExtents, AttackType type, bool devMoveHitbox)
         {
-            GameObject sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            sphere.name = "HitIndicator_" + type;
-            Collider c = sphere.GetComponent<Collider>();
-            if (c) Destroy(c);
+            GameObject indicator = GameObject.CreatePrimitive(devMoveHitbox ? PrimitiveType.Cube : PrimitiveType.Sphere);
+            indicator.name = (devMoveHitbox ? "DevHitbox_" : "HitIndicator_") + type;
+            Collider c = indicator.GetComponent<Collider>();
+            if (c)
+            {
+                c.enabled = false;
+                Destroy(c);
+            }
 
-            sphere.transform.position   = center;
-            sphere.transform.localScale = new Vector3(halfExtents.x * 2f, halfExtents.y * 2f, halfExtents.x * 1.4f);
+            indicator.transform.position = center;
+            indicator.transform.rotation = Quaternion.identity;
+            indicator.transform.localScale = devMoveHitbox
+                ? halfExtents * 2f
+                : new Vector3(halfExtents.x * 2f, halfExtents.y * 2f, halfExtents.x * 1.4f);
 
-            var mr = sphere.GetComponent<MeshRenderer>();
+            var mr = indicator.GetComponent<MeshRenderer>();
             if (mr)
             {
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                mr.receiveShadows    = false;
+
                 if (!sharedHitIndicatorMat)
                 {
-                    Shader s = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Standard");
+                    Shader s = Shader.Find("Sprites/Default")
+                            ?? Shader.Find("Unlit/Transparent")
+                            ?? Shader.Find("Universal Render Pipeline/Unlit")
+                            ?? Shader.Find("Standard");
                     sharedHitIndicatorMat = new Material(s);
                 }
                 mr.sharedMaterial = sharedHitIndicatorMat;
 
-                Color col = type == AttackType.HeavyPunch
-                    ? new Color(1f, 0.35f, 0.15f, 0.42f)
-                    : (type == AttackType.Kick
-                        ? new Color(0.35f, 0.85f, 1f, 0.40f)
-                        : new Color(1f, 0.82f, 0.2f, 0.38f));
+                Color col = devMoveHitbox
+                    ? (type == AttackType.HeavyPunch
+                        ? new Color(1f, 0.14f, 0.08f, 0.46f)
+                        : new Color(1f, 0.36f, 0.06f, 0.44f))
+                    : (type == AttackType.HeavyPunch
+                        ? new Color(1f, 0.35f, 0.15f, 0.42f)
+                        : (type == AttackType.Kick
+                            ? new Color(0.35f, 0.85f, 1f, 0.40f)
+                            : new Color(1f, 0.82f, 0.2f, 0.38f)));
 
                 var pb = new MaterialPropertyBlock();
                 pb.SetColor(ShaderColorId,     col);
@@ -1189,7 +1267,7 @@ namespace EcclesiaFighters
                 mr.SetPropertyBlock(pb);
             }
 
-            Destroy(sphere, 0.14f);
+            Destroy(indicator, devMoveHitbox ? 0.25f : 0.14f);
         }
 
         // ══════════════════════════════════════════════════════
@@ -1280,6 +1358,194 @@ namespace EcclesiaFighters
 
             if (anim.HasState(0, HashIdle)) anim.Play(HashIdle, 0, 0f);
             else AnimTrigger(HashIdle);
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  Dev / Training Mode Helpers (Fighter & Puppet API)
+        // ══════════════════════════════════════════════════════
+        /// <summary>Restores fighter HP to maxHP and syncs HUD bar.</summary>
+        public void FullHeal()
+        {
+            hp = maxHP;
+            if (hpBar) hpBar.value = 1f;
+        }
+
+        /// <summary>Clears held dev/AI posture, walk timers, and walking state.</summary>
+        public void DevClearOverrides()
+        {
+            devForceCrouch   = false;
+            devForceBlock    = false;
+            devWalkTimer     = 0f;
+            devWalkJustEnded = false;
+            aiWantsCrouch    = false;
+            aiWantsBlock     = false;
+            holdingAway      = false;
+            SetWalking(false, false);
+            SetCrouching(false);
+            SetBlocking(false);
+        }
+
+        /// <summary>Revives fighter (if dead) and returns Animator / placeholder visuals cleanly to Idle.</summary>
+        public void DevReviveAndResetIdle()
+        {
+            StopActiveAttack();
+            dead                = false;
+            inputEnabled        = true;
+            hitstunTimer        = 0f;
+            invulnTimer         = 0f;
+            hitFlashTimer       = 0f;
+            blockFlashTimer     = 0f;
+            attackCooldownTimer = 0f;
+            spCooldown          = 0f;
+
+            DevClearOverrides();
+            RestoreCollider();
+            FullHeal();
+
+            if (rb) rb.velocity = Vector3.zero;
+            ResetVisualPose();
+
+            if (animReady && anim)
+            {
+                anim.Rebind();
+                anim.applyRootMotion = false;
+                anim.Update(0f);
+                ResetAnimator();
+            }
+        }
+
+        /// <summary>Triggers KO / Death animation cleanly; set triggerKOEvent=false for animation-only preview.</summary>
+        public void DevForceKill(bool triggerKOEvent = true)
+        {
+            StopActiveAttack();
+            DevClearOverrides();
+
+            dead            = true;
+            hitstunTimer    = 0f;
+            invulnTimer     = 0f;
+            hitFlashTimer   = 0f;
+            blockFlashTimer = 0f;
+
+            if (triggerKOEvent)
+            {
+                hp = 0f;
+                if (hpBar) hpBar.value = 0f;
+                SetInputEnabled(false);
+            }
+
+            if (rb)
+            {
+                Vector3 v = rb.velocity;
+                v.x = 0f;
+                rb.velocity = v;
+            }
+
+            RestoreCollider();
+            AnimTrigger(HashDeath);
+            UpdatePlaceholderVisuals();
+
+            if (triggerKOEvent) OnKO?.Invoke();
+        }
+
+        /// <summary>Plays hitstun, hit-flash, knockback, and Hit animation without needing an attacker.</summary>
+        public void DevTriggerHit(float damage = 0f)
+        {
+            if (dead) DevReviveAndResetIdle();
+
+            StopActiveAttack();
+            DevClearOverrides();
+
+            if (!infiniteHP && damage > 0f)
+            {
+                hp = Mathf.Max(0f, hp - damage);
+                if (hpBar) hpBar.value = hp / maxHP;
+            }
+
+            if (rb)
+            {
+                Vector3 v = rb.velocity;
+                v.x = -FacingDir * 2.8f;
+                rb.velocity = v;
+            }
+
+            hitstunTimer  = 0.28f;
+            hitFlashTimer = 0.28f;
+            AnimTrigger(HashHit);
+            UpdatePlaceholderVisuals();
+        }
+
+        /// <summary>Fires a combat move immediately on this fighter regardless of cooldown or prior attack.</summary>
+        public void DevTriggerAttack(AttackType type)
+        {
+            if (type == AttackType.None) return;
+            if (dead) DevReviveAndResetIdle();
+            if (!inputEnabled) inputEnabled = true;
+
+            StopActiveAttack();
+            devForceBlock = false;
+            aiWantsBlock  = false;
+            SetBlocking(false);
+            hitstunTimer        = 0f;
+            attackCooldownTimer = 0f;
+
+            attackRoutine = type == AttackType.Special
+                ? StartCoroutine(DoSpecialAttack())
+                : StartCoroutine(DoMeleeAttack(type));
+        }
+
+        /// <summary>Triggers a jump immediately on this fighter.</summary>
+        public void DevTriggerJump()
+        {
+            if (dead) DevReviveAndResetIdle();
+            if (!inputEnabled) inputEnabled = true;
+
+            StopActiveAttack();
+            devForceCrouch = false;
+            devForceBlock  = false;
+            aiWantsCrouch  = false;
+            aiWantsBlock   = false;
+            hitstunTimer   = 0f;
+            DoJump();
+        }
+
+        public void DevSetCrouch(bool active)
+        {
+            if (active && dead) DevReviveAndResetIdle();
+            devForceCrouch = active;
+            if (active) { devForceBlock = false; SetBlocking(false); }
+            SetCrouching(active && !isAttacking);
+        }
+
+        public void DevToggleCrouch() => DevSetCrouch(!devForceCrouch);
+
+        public void DevSetBlock(bool active)
+        {
+            if (active && dead) DevReviveAndResetIdle();
+            devForceBlock = active;
+            if (active)
+            {
+                devWalkTimer     = 0f;
+                devWalkJustEnded = false;
+                SetWalking(false, false);
+            }
+            SetBlocking(active && !isAttacking);
+        }
+
+        public void DevToggleBlock() => DevSetBlock(!devForceBlock);
+
+        /// <summary>Walks forward (+1) or backward (-1) relative to FacingDir for duration seconds.</summary>
+        public void DevWalkTimed(int relativeDir, float duration = 1.0f)
+        {
+            if (dead) DevReviveAndResetIdle();
+            if (!inputEnabled) inputEnabled = true;
+
+            StopActiveAttack();
+            devForceBlock    = false;
+            aiWantsBlock     = false;
+            SetBlocking(false);
+            devWalkRelDir    = relativeDir >= 0 ? 1 : -1;
+            devWalkTimer     = Mathf.Max(0.05f, duration);
+            devWalkJustEnded = false;
         }
     }
 }
