@@ -34,6 +34,40 @@ namespace EcclesiaFighters.EditorTools
             "Crouch Walk Right.fbx"
         };
 
+        struct ClipImportSpec
+        {
+            public int  firstFrame;
+            public int  lastFrame;
+            public bool lockRootPositionXZ;
+            public bool lockRootHeightY;
+
+            public ClipImportSpec(int firstFrame, int lastFrame, bool lockRootPositionXZ, bool lockRootHeightY = true)
+            {
+                this.firstFrame         = firstFrame;
+                this.lastFrame          = lastFrame;
+                this.lockRootPositionXZ = lockRootPositionXZ;
+                this.lockRootHeightY    = lockRootHeightY;
+            }
+        }
+
+        // Exact Mixamo 60 FPS frame trims + In-Place root-lock settings
+        static readonly Dictionary<string, ClipImportSpec> ClipImportOverrides =
+            new Dictionary<string, ClipImportSpec>(StringComparer.OrdinalIgnoreCase)
+            {
+                // Light Punch: isolate one crisp jab peaking at ~f28 (remove slow guard bounce & trailing punches)
+                { "Punching Bag.fbx",  new ClipImportSpec(16,  44,  lockRootPositionXZ: false, lockRootHeightY: true) },
+                // Heavy Punch: trim slow wind-up & trailing pause around peak cross at ~f66
+                { "Cross Punch.fbx",   new ClipImportSpec(38,  88,  lockRootPositionXZ: false, lockRootHeightY: true) },
+                // Kick: strip long walk-up approach & landing walk; isolate tornado kick peaking at ~f108
+                { "Kicking.fbx",       new ClipImportSpec(74,  138, lockRootPositionXZ: false, lockRootHeightY: true) },
+                // Special: trim 4.5s pre-cast waving; isolate wind-up + spell throw at ~f334 + follow-through
+                { "Casting Spell.fbx", new ClipImportSpec(278, 438, lockRootPositionXZ: false, lockRootHeightY: true) },
+                // Jump: keep only airborne mid-air pose; Rigidbody controls arc without diagonal/Y drift
+                { "Jump.fbx",          new ClipImportSpec(7,   38,  lockRootPositionXZ: false, lockRootHeightY: false) },
+                // Death: trim initial ~0.9s standing stagger pause so collapse starts immediately
+                { "Dying.fbx",         new ClipImportSpec(56,  185, lockRootPositionXZ: false, lockRootHeightY: true) }
+            };
+
         [MenuItem("EcclesiaFighters/Animations/Setup Karl Marx Animator")]
         public static void SetupKarlMarxMenu()
         {
@@ -63,30 +97,36 @@ namespace EcclesiaFighters.EditorTools
             if (!karlAvatar)
                 throw new InvalidOperationException("Failed to generate Humanoid Avatar from " + BaseModelPath);
 
-            // 2. Configure all Mixamo animation FBX files as Humanoid copying karlAvatar + Bake Into Pose
+            // Preserve existing Idle and Hit clips untouched if already created
+            string idlePath = AnimDir + "KarlMarx_Idle.anim";
+            string hitPath  = AnimDir + "KarlMarx_Hit.anim";
+            AnimationClip existingIdle = AssetDatabase.LoadAssetAtPath<AnimationClip>(idlePath);
+            AnimationClip existingHit  = AssetDatabase.LoadAssetAtPath<AnimationClip>(hitPath);
+            AnimationClip untrimmedDying = existingHit ? null : LoadPrimaryClip(AnimDir + "Dying.fbx");
+
+            // 2. Configure all Mixamo animation FBX files as Humanoid copying karlAvatar + trim & root-lock rules
             ConfigureAnimationFbxFiles(karlAvatar);
 
-            // 3. Extract non-T-pose clips (Idle, CrouchIdle, Block, Hit) from Mixamo Humanoid clips
+            // 3. Load/extract auxiliary pose clips (leave Idle and Hit untouched; generate steady Block & CrouchIdle)
             AnimationClip crouchToStandClip = LoadPrimaryClip(AnimDir + "Crouch To Standing.fbx");
             AnimationClip standToCrouchClip = LoadPrimaryClip(AnimDir + "Standing To Crouch.fbx");
             AnimationClip lightPunchClip    = LoadPrimaryClip(AnimDir + "Punching Bag.fbx");
             AnimationClip dyingClip         = LoadPrimaryClip(AnimDir + "Dying.fbx");
 
-            AnimationClip idleClip = CreatePoseClip(
-                crouchToStandClip, 0.96f, 0.96f, 1.4f, loop: true, gentleBreathing: true,
-                AnimDir + "KarlMarx_Idle.anim");
+            AnimationClip idleClip = existingIdle
+                ? existingIdle
+                : CreatePoseClip(crouchToStandClip, 0.96f, 0.96f, 1.4f, loop: true, gentleBreathing: true, idlePath);
 
             AnimationClip crouchIdleClip = CreatePoseClip(
                 standToCrouchClip, 0.96f, 0.96f, 1.0f, loop: true, gentleBreathing: true,
                 AnimDir + "KarlMarx_CrouchIdle.anim");
 
-            AnimationClip blockClip = CreatePoseClip(
-                lightPunchClip, 0.16f, 0.24f, 0.7f, loop: true, gentleBreathing: false,
-                AnimDir + "KarlMarx_Block.anim");
+            AnimationClip blockClip = CreateStaticBlockClip(
+                lightPunchClip, AnimDir + "KarlMarx_Block.anim");
 
-            AnimationClip hitClip = CreatePoseClip(
-                dyingClip, 0.03f, 0.22f, 0.22f, loop: false, gentleBreathing: false,
-                AnimDir + "KarlMarx_Hit.anim");
+            AnimationClip hitClip = existingHit
+                ? existingHit
+                : CreatePoseClip(untrimmedDying ?? dyingClip, 0.03f, 0.22f, 0.22f, loop: false, gentleBreathing: false, hitPath);
 
             // 4. Build KarlMarx.controller
             AnimatorController controller = BuildAnimatorController(
@@ -160,23 +200,48 @@ namespace EcclesiaFighters.EditorTools
                 imp.importLights    = false;
                 imp.SaveAndReimport();
 
-                ModelImporterClipAnimation[] clips = imp.clipAnimations;
+                ModelImporterClipAnimation[] defaultClips = imp.defaultClipAnimations;
+                ModelImporterClipAnimation[] clips        = imp.clipAnimations;
                 if (clips == null || clips.Length == 0)
-                    clips = imp.defaultClipAnimations;
+                    clips = defaultClips;
 
                 if (clips != null && clips.Length > 0)
                 {
+                    bool hasSpec = ClipImportOverrides.TryGetValue(fileName, out ClipImportSpec spec);
+                    float maxAvailableFrame = (defaultClips != null && defaultClips.Length > 0)
+                        ? defaultClips[0].lastFrame
+                        : clips[0].lastFrame;
+
                     for (int i = 0; i < clips.Length; i++)
                     {
                         ModelImporterClipAnimation c = clips[i];
                         c.loopTime                = shouldLoop;
                         c.loopPose                = shouldLoop;
                         c.lockRootRotation        = true;
-                        c.lockRootHeightY         = true;
-                        c.lockRootPositionXZ      = true;
                         c.keepOriginalOrientation = true;
-                        c.keepOriginalPositionY   = true;
-                        c.keepOriginalPositionXZ  = true;
+
+                        if (hasSpec)
+                        {
+                            float endFrame = maxAvailableFrame > 1f
+                                ? Mathf.Clamp(spec.lastFrame, 1f, maxAvailableFrame)
+                                : spec.lastFrame;
+                            float startFrame = Mathf.Clamp(spec.firstFrame, 0f, Mathf.Max(0f, endFrame - 1f));
+
+                            c.firstFrame              = startFrame;
+                            c.lastFrame               = endFrame;
+                            c.lockRootPositionXZ      = spec.lockRootPositionXZ;
+                            c.keepOriginalPositionXZ  = spec.lockRootPositionXZ;
+                            c.lockRootHeightY         = spec.lockRootHeightY;
+                            c.keepOriginalPositionY   = spec.lockRootHeightY;
+                        }
+                        else
+                        {
+                            c.lockRootHeightY         = true;
+                            c.lockRootPositionXZ      = true;
+                            c.keepOriginalPositionY   = true;
+                            c.keepOriginalPositionXZ  = true;
+                        }
+
                         clips[i] = c;
                     }
                     imp.clipAnimations = clips;
@@ -305,6 +370,52 @@ namespace EcclesiaFighters.EditorTools
             return AssetDatabase.LoadAssetAtPath<AnimationClip>(savePath);
         }
 
+        /// <summary>
+        /// Builds a steady, motionless 2-frame defensive boxing-guard clip sampled from frame 0
+        /// of the trimmed Punching Bag guard stance (zero arm oscillation or root drift).
+        /// </summary>
+        static AnimationClip CreateStaticBlockClip(AnimationClip srcClip, string savePath)
+        {
+            if (File.Exists(savePath))
+                AssetDatabase.DeleteAsset(savePath);
+
+            const float outDuration = 0.25f;
+            var dst = new AnimationClip { name = Path.GetFileNameWithoutExtension(savePath) };
+
+            if (srcClip)
+            {
+                EditorCurveBinding[] bindings = AnimationUtility.GetCurveBindings(srcClip);
+                foreach (EditorCurveBinding binding in bindings)
+                {
+                    AnimationCurve srcCurve = AnimationUtility.GetEditorCurve(srcClip, binding);
+                    if (srcCurve == null) continue;
+
+                    float val = (binding.propertyName == "RootT.x" || binding.propertyName == "RootT.z")
+                        ? 0f
+                        : srcCurve.Evaluate(0f);
+
+                    var flatCurve = new AnimationCurve(
+                        new Keyframe(0f, val),
+                        new Keyframe(outDuration, val));
+                    AnimationUtility.SetEditorCurve(dst, binding, flatCurve);
+                }
+            }
+
+            AnimationClipSettings settings = AnimationUtility.GetAnimationClipSettings(dst);
+            settings.loopTime                = false;
+            settings.loopBlend               = false;
+            settings.loopBlendOrientation    = true;
+            settings.loopBlendPositionY      = true;
+            settings.loopBlendPositionXZ     = true;
+            settings.keepOriginalOrientation = true;
+            settings.keepOriginalPositionY   = true;
+            settings.keepOriginalPositionXZ  = true;
+            AnimationUtility.SetAnimationClipSettings(dst, settings);
+
+            AssetDatabase.CreateAsset(dst, savePath);
+            return AssetDatabase.LoadAssetAtPath<AnimationClip>(savePath);
+        }
+
         // ═════════════════════════════════════════════════════════════════════
         //  4. Build KarlMarx.controller
         // ═════════════════════════════════════════════════════════════════════
@@ -348,25 +459,25 @@ namespace EcclesiaFighters.EditorTools
 
             AnimatorStateMachine sm = controller.layers[0].stateMachine;
 
-            // States
-            AnimatorState stIdle          = AddState(sm, "Idle",              idleClip,          1.0f, new Vector3(260, 0));
-            AnimatorState stWalkFwd       = AddState(sm, "WalkForward",       walkFwdClip,       1.0f, new Vector3(520, -90));
-            AnimatorState stWalkBack      = AddState(sm, "WalkBackward",      walkBackClip,      1.0f, new Vector3(520, 60));
-            AnimatorState stBlocking      = AddState(sm, "Blocking",          blockClip,         1.0f, new Vector3(260, -140));
+            // States (combat clips trimmed + sped up; Blocking frozen at speed = 0 on guard frame)
+            AnimatorState stIdle          = AddState(sm, "Idle",              idleClip,          1.00f, new Vector3(260, 0));
+            AnimatorState stWalkFwd       = AddState(sm, "WalkForward",       walkFwdClip,       1.00f, new Vector3(520, -90));
+            AnimatorState stWalkBack      = AddState(sm, "WalkBackward",      walkBackClip,      1.00f, new Vector3(520, 60));
+            AnimatorState stBlocking      = AddState(sm, "Blocking",          blockClip,         0.00f, new Vector3(260, -140));
 
-            AnimatorState stStandToCrouch = AddState(sm, "StandingToCrouch",  standToCrouchClip, 1.6f, new Vector3(260, 140));
-            AnimatorState stCrouchIdle    = AddState(sm, "CrouchIdle",        crouchIdleClip,    1.0f, new Vector3(260, 240));
-            AnimatorState stCrouchWalkFwd = AddState(sm, "CrouchWalkForward", crouchWalkFwdClip, 1.0f, new Vector3(520, 200));
-            AnimatorState stCrouchWalkBack= AddState(sm, "CrouchWalkBack",    crouchWalkBackClip,1.0f, new Vector3(520, 300));
-            AnimatorState stCrouchToStand = AddState(sm, "CrouchToStanding",  crouchToStandClip, 1.6f, new Vector3(40, 140));
+            AnimatorState stStandToCrouch = AddState(sm, "StandingToCrouch",  standToCrouchClip, 1.60f, new Vector3(260, 140));
+            AnimatorState stCrouchIdle    = AddState(sm, "CrouchIdle",        crouchIdleClip,    1.00f, new Vector3(260, 240));
+            AnimatorState stCrouchWalkFwd = AddState(sm, "CrouchWalkForward", crouchWalkFwdClip, 1.00f, new Vector3(520, 200));
+            AnimatorState stCrouchWalkBack= AddState(sm, "CrouchWalkBack",    crouchWalkBackClip,1.00f, new Vector3(520, 300));
+            AnimatorState stCrouchToStand = AddState(sm, "CrouchToStanding",  crouchToStandClip, 1.60f, new Vector3(40, 140));
 
-            AnimatorState stJump          = AddState(sm, "Jump",              jumpClip,          1.15f, new Vector3(-20, -120));
-            AnimatorState stLightPunch    = AddState(sm, "LightPunch",        lightPunchClip,    1.55f, new Vector3(-20, -40));
-            AnimatorState stHeavyPunch    = AddState(sm, "HeavyPunch",        heavyPunchClip,    1.30f, new Vector3(-20, 30));
-            AnimatorState stKick          = AddState(sm, "Kick",              kickClip,          1.30f, new Vector3(-20, 100));
-            AnimatorState stSpecial       = AddState(sm, "Special",           specialClip,       1.35f, new Vector3(-20, 170));
+            AnimatorState stJump          = AddState(sm, "Jump",              jumpClip,          0.90f, new Vector3(-20, -120));
+            AnimatorState stLightPunch    = AddState(sm, "LightPunch",        lightPunchClip,    1.70f, new Vector3(-20, -40));
+            AnimatorState stHeavyPunch    = AddState(sm, "HeavyPunch",        heavyPunchClip,    1.70f, new Vector3(-20, 30));
+            AnimatorState stKick          = AddState(sm, "Kick",              kickClip,          2.00f, new Vector3(-20, 100));
+            AnimatorState stSpecial       = AddState(sm, "Special",           specialClip,       2.55f, new Vector3(-20, 170));
             AnimatorState stHit           = AddState(sm, "Hit",               hitClip,           1.00f, new Vector3(-20, 240));
-            AnimatorState stDeath         = AddState(sm, "Death",             dyingClip,         1.00f, new Vector3(-20, 320));
+            AnimatorState stDeath         = AddState(sm, "Death",             dyingClip,         1.25f, new Vector3(-20, 320));
 
             sm.defaultState = stIdle;
 
@@ -383,10 +494,12 @@ namespace EcclesiaFighters.EditorTools
             // ── Blocking transitions ─────────────────────────────────
             AnimatorState[] guardableStates = { stIdle, stWalkFwd, stWalkBack, stCrouchIdle, stCrouchWalkFwd, stCrouchWalkBack };
             foreach (AnimatorState st in guardableStates)
-                AddBoolTransition(st, stBlocking, 0.07f, ("Blocking", true));
+                AddBoolTransition(st, stBlocking, 0.06f, ("Blocking", true));
 
-            AddBoolTransition(stBlocking, stCrouchIdle, 0.08f, ("Blocking", false), ("Crouching", true));
-            AddBoolTransition(stBlocking, stIdle,       0.08f, ("Blocking", false), ("Crouching", false));
+            AddBoolTransition(stBlocking, stWalkFwd,    0.07f, ("Blocking", false), ("Crouching", false), ("Walking", true));
+            AddBoolTransition(stBlocking, stWalkBack,   0.07f, ("Blocking", false), ("Crouching", false), ("WalkingBack", true));
+            AddBoolTransition(stBlocking, stCrouchIdle, 0.07f, ("Blocking", false), ("Crouching", true));
+            AddBoolTransition(stBlocking, stIdle,       0.07f, ("Blocking", false), ("Crouching", false));
 
             // ── Crouch transitions ───────────────────────────────────
             AddBoolTransition(stIdle,     stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false));
@@ -417,21 +530,22 @@ namespace EcclesiaFighters.EditorTools
             AddExitTransition(stCrouchToStand, stIdle, 0.88f, 0.08f);
 
             // ── Combat / Jump / Hit / Death (AnyState snappy triggers) ──
-            // Death evaluated first so KO overrides any simultaneous Hit trigger.
-            AddAnyTrigger(sm, stDeath,      "Death",      0.08f, canTransitionToSelf: false);
-            AddAnyTrigger(sm, stHit,        "Hit",        0.06f, canTransitionToSelf: true);
-            AddAnyTrigger(sm, stJump,       "Jump",       0.08f, canTransitionToSelf: false);
-            AddAnyTrigger(sm, stLightPunch, "LightPunch", 0.06f, canTransitionToSelf: true);
-            AddAnyTrigger(sm, stHeavyPunch, "HeavyPunch", 0.08f, canTransitionToSelf: false);
-            AddAnyTrigger(sm, stKick,       "Kick",       0.08f, canTransitionToSelf: false);
-            AddAnyTrigger(sm, stSpecial,    "Special",    0.08f, canTransitionToSelf: false);
+            // Death evaluated first with near-instant 0.03s blend so KO never snaps upright before falling.
+            AddAnyTrigger(sm, stDeath,      "Death",      0.03f, canTransitionToSelf: false);
+            AddAnyTrigger(sm, stHit,        "Hit",        0.05f, canTransitionToSelf: true);
+            AddAnyTrigger(sm, stJump,       "Jump",       0.06f, canTransitionToSelf: false);
+            AddAnyTrigger(sm, stLightPunch, "LightPunch", 0.04f, canTransitionToSelf: true);
+            AddAnyTrigger(sm, stHeavyPunch, "HeavyPunch", 0.06f, canTransitionToSelf: true);
+            AddAnyTrigger(sm, stKick,       "Kick",       0.06f, canTransitionToSelf: true);
+            AddAnyTrigger(sm, stSpecial,    "Special",    0.06f, canTransitionToSelf: true);
 
             // One-shot return transitions (no exit transition on Death so he stays on final frame)
             AnimatorState[] actionStates = { stJump, stLightPunch, stHeavyPunch, stKick, stSpecial, stHit };
             foreach (AnimatorState st in actionStates)
             {
-                AddExitTransition(st, stCrouchIdle, 0.86f, 0.10f, ("Crouching", true));
-                AddExitTransition(st, stIdle,       0.86f, 0.10f, ("Crouching", false));
+                AddExitTransition(st, stBlocking,   0.88f, 0.08f, ("Blocking", true));
+                AddExitTransition(st, stCrouchIdle, 0.88f, 0.08f, ("Blocking", false), ("Crouching", true));
+                AddExitTransition(st, stIdle,       0.88f, 0.08f, ("Blocking", false), ("Crouching", false));
             }
 
             EditorUtility.SetDirty(controller);
@@ -558,6 +672,29 @@ namespace EcclesiaFighters.EditorTools
                 if (fc)
                 {
                     fc.visualRoot = visualGo.transform;
+
+                    // Sync hitboxes & special throw spawn to trimmed/sped-up mixamo peaks
+                    fc.lightPunchStartup   = 0.11f;
+                    fc.heavyPunchStartup   = 0.25f;
+                    fc.kickStartup         = 0.26f;
+                    fc.specialSpawnDelay   = 0.37f;
+
+                    fc.lightPunch.startup  = 0.11f;
+                    fc.lightPunch.active   = 0.09f;
+                    fc.lightPunch.recovery = 0.14f;
+
+                    fc.heavyPunch.startup  = 0.25f;
+                    fc.heavyPunch.active   = 0.12f;
+                    fc.heavyPunch.recovery = 0.20f;
+
+                    fc.kick.startup        = 0.26f;
+                    fc.kick.active         = 0.13f;
+                    fc.kick.recovery       = 0.18f;
+
+                    fc.specialStartup      = 0.37f;
+                    fc.specialActive       = 0.12f;
+                    fc.specialRecovery     = 0.50f;
+
                     EditorUtility.SetDirty(fc);
                 }
 

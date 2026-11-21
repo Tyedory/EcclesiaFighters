@@ -128,6 +128,16 @@ namespace EcclesiaFighters
         public float fallbackChestHeight = 1.3f;
         public float muzzleForwardOffset = 0.55f;
 
+        [Header("Animated Impact Timings (Used when AnimatorController is assigned)")]
+        [Tooltip("Seconds from Light Punch input until hitbox activates when animated.")]
+        public float lightPunchStartup = 0.11f;
+        [Tooltip("Seconds from Heavy Punch input until hitbox activates when animated.")]
+        public float heavyPunchStartup = 0.25f;
+        [Tooltip("Seconds from Kick input until hitbox activates when animated.")]
+        public float kickStartup       = 0.24f;
+        [Tooltip("Seconds from Special input until projectile spawns at throw release when animated.")]
+        public float specialSpawnDelay = 0.37f;
+
         // ── Controls (Player 1 defaults) ──────────────────────
         [Header("Controls — ignored when isPlayerControlled=false")]
         public KeyCode keyLeft       = KeyCode.A;
@@ -723,6 +733,12 @@ namespace EcclesiaFighters
 
         void TriggerAttackAnimation(AttackType type)
         {
+            AnimResetTrigger(HashLightPunch);
+            AnimResetTrigger(HashHeavyPunch);
+            AnimResetTrigger(HashPunch);
+            AnimResetTrigger(HashKick);
+            AnimResetTrigger(HashSpecial);
+
             switch (type)
             {
                 case AttackType.LightPunch:
@@ -740,6 +756,24 @@ namespace EcclesiaFighters
             }
         }
 
+        float GetEffectiveMeleeStartup(AttackType type, AttackConfig spec)
+        {
+            if (!animReady) return spec.startup;
+            switch (type)
+            {
+                case AttackType.LightPunch: return lightPunchStartup > 0f ? lightPunchStartup : spec.startup;
+                case AttackType.HeavyPunch: return heavyPunchStartup > 0f ? heavyPunchStartup : spec.startup;
+                case AttackType.Kick:       return kickStartup       > 0f ? kickStartup       : spec.startup;
+                default:                    return spec.startup;
+            }
+        }
+
+        float GetEffectiveSpecialSpawnDelay()
+        {
+            if (!animReady) return specialStartup;
+            return specialSpawnDelay > 0f ? specialSpawnDelay : specialStartup;
+        }
+
         IEnumerator DoMeleeAttack(AttackType type)
         {
             AttackConfig spec = GetAttackConfig(type);
@@ -749,9 +783,9 @@ namespace EcclesiaFighters
             SetBlocking(false);
             TriggerAttackAnimation(type);
 
-            // 1) Startup
+            // 1) Startup (synced to impact frame when animated, fast fallback otherwise)
             attackPhase = AttackPhase.Startup;
-            yield return RunPhaseTimer(spec.startup);
+            yield return RunPhaseTimer(GetEffectiveMeleeStartup(type, spec));
 
             // 2) Active
             attackPhase = AttackPhase.Active;
@@ -796,9 +830,9 @@ namespace EcclesiaFighters
             SetBlocking(false);
             TriggerAttackAnimation(AttackType.Special);
 
-            // 1) Startup
+            // 1) Startup (synced to actual throw release frame when animated)
             attackPhase = AttackPhase.Startup;
-            yield return RunPhaseTimer(specialStartup);
+            yield return RunPhaseTimer(GetEffectiveSpecialSpawnDelay());
 
             // 2) Active — fire projectile
             attackPhase = AttackPhase.Active;
@@ -1352,6 +1386,13 @@ namespace EcclesiaFighters
                 return true;
             }
             return false;
+        }
+
+        void AnimResetTrigger(int hash)
+        {
+            if (!animReady) return;
+            if (animParams.TryGetValue(hash, out var t) && t == AnimatorControllerParameterType.Trigger)
+                anim.ResetTrigger(hash);
         }
 
         void AnimBool(int hash, bool value)
