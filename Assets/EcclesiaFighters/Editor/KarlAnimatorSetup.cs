@@ -62,8 +62,8 @@ namespace EcclesiaFighters.EditorTools
                 { "Kicking.fbx",       new ClipImportSpec(74,  138, lockRootPositionXZ: false, lockRootHeightY: true) },
                 // Special: trim 4.5s pre-cast waving; isolate wind-up + spell throw at ~f334 + follow-through
                 { "Casting Spell.fbx", new ClipImportSpec(278, 438, lockRootPositionXZ: false, lockRootHeightY: true) },
-                // Jump: keep only airborne apex pose (strip initial crouch/takeoff dip f0..15 and landing run f29..60)
-                { "Jump.fbx",          new ClipImportSpec(16,  28,  lockRootPositionXZ: false, lockRootHeightY: false) },
+                // Jump: keep only airborne apex pose; Feet-anchored Y prevents underground sinking while XZ root stays stripped
+                { "Jump.fbx",          new ClipImportSpec(16,  28,  lockRootPositionXZ: false, lockRootHeightY: true) },
                 // Death: trim initial ~0.9s standing stagger pause so collapse starts immediately
                 { "Dying.fbx",         new ClipImportSpec(56,  185, lockRootPositionXZ: false, lockRootHeightY: true) }
             };
@@ -232,13 +232,17 @@ namespace EcclesiaFighters.EditorTools
                             c.lockRootPositionXZ      = spec.lockRootPositionXZ;
                             c.keepOriginalPositionXZ  = spec.lockRootPositionXZ;
                             c.lockRootHeightY         = spec.lockRootHeightY;
-                            c.keepOriginalPositionY   = spec.lockRootHeightY;
+                            c.heightFromFeet          = true;
+                            c.keepOriginalPositionY   = false;
+                            c.heightOffset            = 0f;
                         }
                         else
                         {
                             c.lockRootHeightY         = true;
+                            c.heightFromFeet          = true;
+                            c.keepOriginalPositionY   = false;
+                            c.heightOffset            = 0f;
                             c.lockRootPositionXZ      = true;
-                            c.keepOriginalPositionY   = true;
                             c.keepOriginalPositionXZ  = true;
                         }
 
@@ -686,23 +690,34 @@ namespace EcclesiaFighters.EditorTools
                 {
                     fc.visualRoot = visualGo.transform;
 
+                    // Snappy arcade jump & slimmer melee hitboxes
+                    fc.jumpForce               = 11.2f;
+                    fc.ascentGravityMultiplier = 2.2f;
+                    fc.fallGravityMultiplier   = 3.0f;
+
                     // Sync hitboxes & special throw spawn to trimmed/sped-up mixamo peaks
                     fc.lightPunchStartup   = 0.11f;
                     fc.heavyPunchStartup   = 0.25f;
                     fc.kickStartup         = 0.26f;
                     fc.specialSpawnDelay   = 0.37f;
 
-                    fc.lightPunch.startup  = 0.11f;
-                    fc.lightPunch.active   = 0.09f;
-                    fc.lightPunch.recovery = 0.14f;
+                    fc.lightPunch.startup         = 0.11f;
+                    fc.lightPunch.active          = 0.09f;
+                    fc.lightPunch.recovery        = 0.14f;
+                    fc.lightPunch.range           = 0.52f;
+                    fc.lightPunch.hitHalfExtents  = new Vector3(0.32f, 0.36f, 0.60f);
 
-                    fc.heavyPunch.startup  = 0.25f;
-                    fc.heavyPunch.active   = 0.12f;
-                    fc.heavyPunch.recovery = 0.20f;
+                    fc.heavyPunch.startup         = 0.25f;
+                    fc.heavyPunch.active          = 0.12f;
+                    fc.heavyPunch.recovery        = 0.20f;
+                    fc.heavyPunch.range           = 0.62f;
+                    fc.heavyPunch.hitHalfExtents  = new Vector3(0.37f, 0.38f, 0.60f);
 
-                    fc.kick.startup        = 0.26f;
-                    fc.kick.active         = 0.13f;
-                    fc.kick.recovery       = 0.18f;
+                    fc.kick.startup               = 0.26f;
+                    fc.kick.active                = 0.13f;
+                    fc.kick.recovery              = 0.18f;
+                    fc.kick.range                 = 0.72f;
+                    fc.kick.hitHalfExtents        = new Vector3(0.42f, 0.38f, 0.60f);
 
                     fc.specialStartup      = 0.37f;
                     fc.specialActive       = 0.12f;

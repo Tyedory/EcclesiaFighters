@@ -22,7 +22,7 @@ namespace EcclesiaFighters
         public Difficulty difficulty = Difficulty.Medio;
 
         [Header("Distâncias")]
-        public float closeRange = 1.95f;
+        public float closeRange = 1.32f;
         public float midRange   = 5.5f;
         public float retreatHP  = 0.25f;
 
@@ -47,6 +47,7 @@ namespace EcclesiaFighters
         void Awake()
         {
             self = GetComponent<FighterController>();
+            if (closeRange > 1.45f) closeRange = 1.32f;
         }
 
         void OnEnable()
@@ -224,7 +225,7 @@ namespace EcclesiaFighters
                 if (roll < 0.30f && CanUseRangedSpecial()) return State.Special;
 
                 // Mix LightPunch, HeavyPunch, Kick, and CrouchPoke based on distance
-                if (dist <= 1.35f)
+                if (dist <= 1.05f)
                 {
                     float atk = Random.value;
                     if (atk < 0.42f) return State.LightPunch;

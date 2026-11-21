@@ -91,7 +91,9 @@ namespace EcclesiaFighters
         [Range(0.3f, 1f)] public float backWalkSpeedMultiplier = 0.82f;
         [Range(0.2f, 0.9f)] public float crouchSpeedMultiplier = 0.45f;
         [Range(0.4f, 0.85f)] public float crouchHeightRatio    = 0.60f;
-        public float jumpForce               = 7.8f;
+        public float jumpForce               = 11.2f;
+        public float ascentGravityMultiplier = 2.2f;
+        public float fallGravityMultiplier   = 3.0f;
         public float blockReduction          = 0.15f;   // blocked hit = 15% chip damage
         public float blockKnockbackScale     = 0.35f;
         public float knockbackDamping        = 18f;
@@ -104,11 +106,11 @@ namespace EcclesiaFighters
         // ── Attacks ───────────────────────────────────────────
         [Header("Melee Moves")]
         public AttackConfig lightPunch = new AttackConfig(
-            8f,  0.07f, 0.09f, 0.14f, 0.08f, 0.85f, new Vector3(0.55f, 0.40f, 0.75f), 2.2f, 0.18f);
+            8f,  0.07f, 0.09f, 0.14f, 0.08f, 0.52f, new Vector3(0.32f, 0.36f, 0.60f), 2.2f, 0.18f);
         public AttackConfig heavyPunch = new AttackConfig(
-            15f, 0.16f, 0.12f, 0.26f, 0.18f, 1.05f, new Vector3(0.65f, 0.42f, 0.75f), 5.0f, 0.32f);
+            15f, 0.16f, 0.12f, 0.26f, 0.18f, 0.62f, new Vector3(0.37f, 0.38f, 0.60f), 5.0f, 0.32f);
         public AttackConfig kick = new AttackConfig(
-            13f, 0.13f, 0.13f, 0.24f, 0.15f, 1.25f, new Vector3(0.75f, 0.42f, 0.75f), 5.8f, 0.28f);
+            13f, 0.13f, 0.13f, 0.24f, 0.15f, 0.72f, new Vector3(0.42f, 0.38f, 0.60f), 5.8f, 0.28f);
 
         // ── Facing ────────────────────────────────────────────
         [Header("Facing")]
@@ -281,8 +283,33 @@ namespace EcclesiaFighters
                 bottomLocalY       = origColliderCenter.y - origColliderHeight * 0.5f;
             }
 
+            ApplyArcadeCombatTuning();
             CacheAnimator();
             CacheVisuals();
+        }
+
+        void ApplyArcadeCombatTuning()
+        {
+            // Upgrade legacy serialized prefab values to snappy arcade jump & tighter melee hitboxes
+            if (jumpForce < 9.5f) jumpForce = 11.2f;
+            if (ascentGravityMultiplier < 1.1f) ascentGravityMultiplier = 2.2f;
+            if (fallGravityMultiplier   < 1.1f) fallGravityMultiplier   = 3.0f;
+
+            if (lightPunch.hitHalfExtents.x > 0.45f || lightPunch.range > 0.70f)
+            {
+                lightPunch.range          = 0.52f;
+                lightPunch.hitHalfExtents = new Vector3(0.32f, 0.36f, 0.60f);
+            }
+            if (heavyPunch.hitHalfExtents.x > 0.50f || heavyPunch.range > 0.82f)
+            {
+                heavyPunch.range          = 0.62f;
+                heavyPunch.hitHalfExtents = new Vector3(0.37f, 0.38f, 0.60f);
+            }
+            if (kick.hitHalfExtents.x > 0.55f || kick.range > 0.95f)
+            {
+                kick.range          = 0.72f;
+                kick.hitHalfExtents = new Vector3(0.42f, 0.38f, 0.60f);
+            }
         }
 
         void Start() => ResetFighter();
@@ -527,6 +554,13 @@ namespace EcclesiaFighters
                 v.x = Mathf.MoveTowards(v.x, 0f, knockbackDamping * Time.fixedDeltaTime);
                 v.z = 0f;
                 rb.velocity = v;
+
+                if (!grounded)
+                {
+                    float gravMul = v.y > 0.05f ? ascentGravityMultiplier : fallGravityMultiplier;
+                    if (gravMul > 1f)
+                        rb.AddForce(Physics.gravity * (gravMul - 1f), ForceMode.Acceleration);
+                }
             }
 
             ClampStagePosition();
