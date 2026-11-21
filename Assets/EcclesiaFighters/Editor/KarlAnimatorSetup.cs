@@ -62,8 +62,8 @@ namespace EcclesiaFighters.EditorTools
                 { "Kicking.fbx",       new ClipImportSpec(74,  138, lockRootPositionXZ: false, lockRootHeightY: true) },
                 // Special: trim 4.5s pre-cast waving; isolate wind-up + spell throw at ~f334 + follow-through
                 { "Casting Spell.fbx", new ClipImportSpec(278, 438, lockRootPositionXZ: false, lockRootHeightY: true) },
-                // Jump: keep only airborne mid-air pose; Rigidbody controls arc without diagonal/Y drift
-                { "Jump.fbx",          new ClipImportSpec(7,   38,  lockRootPositionXZ: false, lockRootHeightY: false) },
+                // Jump: keep only airborne apex pose (strip initial crouch/takeoff dip f0..15 and landing run f29..60)
+                { "Jump.fbx",          new ClipImportSpec(16,  28,  lockRootPositionXZ: false, lockRootHeightY: false) },
                 // Death: trim initial ~0.9s standing stagger pause so collapse starts immediately
                 { "Dying.fbx",         new ClipImportSpec(56,  185, lockRootPositionXZ: false, lockRootHeightY: true) }
             };
@@ -447,6 +447,12 @@ namespace EcclesiaFighters.EditorTools
             controller.AddParameter("WalkingBack", AnimatorControllerParameterType.Bool);
             controller.AddParameter("Crouching",   AnimatorControllerParameterType.Bool);
             controller.AddParameter("Blocking",    AnimatorControllerParameterType.Bool);
+            controller.AddParameter(new AnimatorControllerParameter
+            {
+                name        = "IsGrounded",
+                type        = AnimatorControllerParameterType.Bool,
+                defaultBool = true
+            });
 
             controller.AddParameter("Jump",        AnimatorControllerParameterType.Trigger);
             controller.AddParameter("LightPunch",  AnimatorControllerParameterType.Trigger);
@@ -471,7 +477,7 @@ namespace EcclesiaFighters.EditorTools
             AnimatorState stCrouchWalkBack= AddState(sm, "CrouchWalkBack",    crouchWalkBackClip,1.00f, new Vector3(520, 300));
             AnimatorState stCrouchToStand = AddState(sm, "CrouchToStanding",  crouchToStandClip, 1.60f, new Vector3(40, 140));
 
-            AnimatorState stJump          = AddState(sm, "Jump",              jumpClip,          0.90f, new Vector3(-20, -120));
+            AnimatorState stJump          = AddState(sm, "Jump",              jumpClip,          0.25f, new Vector3(-20, -120));
             AnimatorState stLightPunch    = AddState(sm, "LightPunch",        lightPunchClip,    1.70f, new Vector3(-20, -40));
             AnimatorState stHeavyPunch    = AddState(sm, "HeavyPunch",        heavyPunchClip,    1.70f, new Vector3(-20, 30));
             AnimatorState stKick          = AddState(sm, "Kick",              kickClip,          2.00f, new Vector3(-20, 100));
@@ -539,8 +545,15 @@ namespace EcclesiaFighters.EditorTools
             AddAnyTrigger(sm, stKick,       "Kick",       0.06f, canTransitionToSelf: true);
             AddAnyTrigger(sm, stSpecial,    "Special",    0.06f, canTransitionToSelf: true);
 
-            // One-shot return transitions (no exit transition on Death so he stays on final frame)
-            AnimatorState[] actionStates = { stJump, stLightPunch, stHeavyPunch, stKick, stSpecial, stHit };
+            // Jump holds airborne pose while IsGrounded == false, returning cleanly on landing
+            AddBoolTransition(stJump, stBlocking,   0.08f, ("IsGrounded", true), ("Blocking", true));
+            AddBoolTransition(stJump, stCrouchIdle, 0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", true));
+            AddBoolTransition(stJump, stWalkFwd,    0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("Walking", true));
+            AddBoolTransition(stJump, stWalkBack,   0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("WalkingBack", true));
+            AddBoolTransition(stJump, stIdle,       0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("Walking", false), ("WalkingBack", false));
+
+            // One-shot attack/hit return transitions (no exit transition on Death so he stays on final frame)
+            AnimatorState[] actionStates = { stLightPunch, stHeavyPunch, stKick, stSpecial, stHit };
             foreach (AnimatorState st in actionStates)
             {
                 AddExitTransition(st, stBlocking,   0.88f, 0.08f, ("Blocking", true));

@@ -125,8 +125,10 @@ namespace EcclesiaFighters
 
         IEnumerator SpawnFighters(int idxA, int idxB)
         {
-            int cleanA = Clamp(idxA);
-            int cleanB = Clamp(idxB);
+            int cleanA  = Clamp(idxA);
+            int cleanB  = Clamp(idxB);
+            bool p1IsAI = PlayerPrefs.GetInt("P1IsAI", 0) == 1;
+            bool p2IsAI = PlayerPrefs.GetInt("P2IsAI", 1) == 1;
 
             objA = Instantiate(characterPrefabs[cleanA], spawnA.position, Quaternion.Euler(0, 90, 0));
             objB = Instantiate(characterPrefabs[cleanB], spawnB.position, Quaternion.Euler(0, -90, 0));
@@ -139,7 +141,7 @@ namespace EcclesiaFighters
             if (ctrlA)
             {
                 ctrlA.characterName = NAMES[cleanA];
-                ctrlA.ConfigureControlOwnership(playerControlled: true);
+                ctrlA.ConfigureControlOwnership(playerControlled: !p1IsAI, slotIndex: 0);
                 ctrlA.opponent      = objB.transform;
                 ctrlA.hpBar         = hpBarA;
                 ctrlA.FaceDirection(+1);
@@ -150,7 +152,7 @@ namespace EcclesiaFighters
             if (ctrlB)
             {
                 ctrlB.characterName = NAMES[cleanB];
-                ctrlB.ConfigureControlOwnership(playerControlled: false);
+                ctrlB.ConfigureControlOwnership(playerControlled: !p2IsAI, slotIndex: 1);
                 ctrlB.opponent      = objA.transform;
                 ctrlB.hpBar         = hpBarB;
                 ctrlB.FaceDirection(-1);

@@ -40,8 +40,8 @@ namespace EcclesiaFighters
         GameObject canvasGO;
         Font       uiFont;
 
-        Button aiToggleBtn, freezeTimerBtn;
-        Text   aiToggleLbl, freezeTimerLbl;
+        Button aiP1ToggleBtn, aiP2ToggleBtn, freezeTimerBtn;
+        Text   aiP1ToggleLbl, aiP2ToggleLbl, freezeTimerLbl;
 
         Button speed1Btn, speedHalfBtn, speedQuarterBtn;
         Text   speed1Lbl, speedHalfLbl, speedQuarterLbl;
@@ -317,51 +317,41 @@ namespace EcclesiaFighters
             return targetIndex == 0 ? mgr.FighterA : mgr.FighterB;
         }
 
-        /// <summary>Gets puppet target, keeps P1 strictly AI-free, and auto-disables FighterAI on P2.</summary>
+        /// <summary>Gets puppet target and automatically disables any active FighterAI on that target.</summary>
         FighterController PreparePuppetTarget()
         {
             FighterController target = GetTargetFighter();
             if (!target) return null;
 
-            if (targetIndex == 0)
+            var ai = target.GetComponent<FighterAI>();
+            if (ai && ai.enabled)
             {
-                // P1 must never have a stray FighterAI running
-                target.isPlayerControlled = true;
-                foreach (FighterAI stray in target.GetComponents<FighterAI>())
-                {
-                    if (!stray) continue;
-                    stray.enabled = false;
-                    stray.StopAllCoroutines();
-                    Destroy(stray);
-                }
-            }
-            else
-            {
-                target.isPlayerControlled = false;
-                var ai = target.GetComponent<FighterAI>();
-                if (ai && ai.enabled)
-                {
-                    ai.enabled = false;
-                    target.DevClearOverrides();
-                }
+                ai.enabled = false;
+                target.DevClearOverrides();
             }
             return target;
         }
 
-        void ToggleAI()
+        void ToggleAI(int slot)
         {
-            // P1 must never have AI enabled
-            FighterController a = mgr ? mgr.FighterA : null;
-            if (a) a.ConfigureControlOwnership(playerControlled: true);
+            FighterController f = mgr ? (slot == 0 ? mgr.FighterA : mgr.FighterB) : null;
+            if (!f) return;
 
-            // Bind AI toggle strictly to Fighter B (P2) regardless of character prefab
-            FighterController b = mgr ? mgr.FighterB : null;
-            if (!b) return;
-            b.isPlayerControlled = false;
-            var ai = b.GetComponent<FighterAI>() ?? b.gameObject.AddComponent<FighterAI>();
+            var ai = f.GetComponent<FighterAI>();
+            bool currentlyAI = !f.isPlayerControlled && ai && ai.enabled;
 
-            ai.enabled = !ai.enabled;
-            if (!ai.enabled) b.DevClearOverrides();
+            if (currentlyAI)
+            {
+                if (ai) ai.enabled = false;
+                f.DevClearOverrides();
+                string prefKey = slot == 0 ? "P1IsAI" : "P2IsAI";
+                bool restoreHuman = slot == 0 || PlayerPrefs.GetInt(prefKey, 1) == 0;
+                f.isPlayerControlled = restoreHuman;
+            }
+            else
+            {
+                f.ConfigureControlOwnership(playerControlled: false, slotIndex: slot);
+            }
             FinishClick();
         }
 
@@ -433,10 +423,13 @@ namespace EcclesiaFighters
             FighterController a = mgr.FighterA;
             FighterController b = mgr.FighterB;
 
-            // AI Toggle
-            var ai = b ? b.GetComponent<FighterAI>() : null;
-            bool aiOn = ai && ai.enabled;
-            SetToggleStyle(aiToggleBtn, aiToggleLbl, aiOn, "AI P2: ON", ai ? "AI P2: OFF" : "AI P2: N/A");
+            // Independent AI Toggles for P1 and P2
+            var aiA  = a ? a.GetComponent<FighterAI>() : null;
+            var aiB  = b ? b.GetComponent<FighterAI>() : null;
+            bool aiOnA = a && !a.isPlayerControlled && aiA && aiA.enabled;
+            bool aiOnB = b && !b.isPlayerControlled && aiB && aiB.enabled;
+            SetToggleStyle(aiP1ToggleBtn, aiP1ToggleLbl, aiOnA, "AI P1: ON", "AI P1: OFF");
+            SetToggleStyle(aiP2ToggleBtn, aiP2ToggleLbl, aiOnB, "AI P2: ON", "AI P2: OFF");
 
             // Timer Freeze
             SetToggleStyle(freezeTimerBtn, freezeTimerLbl, mgr.freezeTimer, "TIMER: FROZEN", "TIMER: RUNNING");
@@ -611,9 +604,12 @@ namespace EcclesiaFighters
 
             // ── SECTION 1: Match & Cheat Controls ─────────────────
             Transform sMatch = CreateSection(content.transform, "MATCH & CHEATS");
-            Transform row1 = CreateRow(sMatch);
-            (aiToggleBtn, aiToggleLbl)       = CreateButton(row1, "AI P2: ON",      ColBtnIdle, ToggleAI);
-            (freezeTimerBtn, freezeTimerLbl) = CreateButton(row1, "TIMER: RUNNING", ColBtnIdle, ToggleFreezeTimer);
+            Transform rowAI = CreateRow(sMatch);
+            (aiP1ToggleBtn, aiP1ToggleLbl) = CreateButton(rowAI, "AI P1: OFF", ColBtnIdle, () => ToggleAI(0));
+            (aiP2ToggleBtn, aiP2ToggleLbl) = CreateButton(rowAI, "AI P2: ON",  ColBtnIdle, () => ToggleAI(1));
+
+            Transform rowTimer = CreateRow(sMatch);
+            (freezeTimerBtn, freezeTimerLbl) = CreateButton(rowTimer, "TIMER: RUNNING", ColBtnIdle, ToggleFreezeTimer);
 
             CreateSubLabel(sMatch, "Game Speed (Time.timeScale)");
             Transform rowSpeed = CreateRow(sMatch);
@@ -647,7 +643,7 @@ namespace EcclesiaFighters
 
             targetStatusText = CreateSubLabel(sPuppet, "Target ready");
 
-            CreateSubLabel(sPuppet, "Combat Moves (Auto-disables AI on P2)");
+            CreateSubLabel(sPuppet, "Combat Moves (Auto-disables target AI)");
             Transform rowAtk1 = CreateRow(sPuppet);
             CreateButton(rowAtk1, "Light Punch", ColBtnIdle, () => RunPuppet(f => f.DevTriggerAttack(FighterController.AttackType.LightPunch)));
             CreateButton(rowAtk1, "Heavy Punch", ColBtnIdle, () => RunPuppet(f => f.DevTriggerAttack(FighterController.AttackType.HeavyPunch)));

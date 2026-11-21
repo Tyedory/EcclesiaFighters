@@ -525,10 +525,17 @@ namespace EcclesiaFighters.EditorTools
 
             mgr.buttonsA = BuildFighterCard(root, "PlayerCardA", "JOGADOR 1  ·  ORDEM DA FÉ",
                 "ESTILO: LUZ SAGRADA & CONTRA-ATAQUE", 0.05f, 0.44f, FaithBlue, mgr, true,
-                out mgr.portraitA, out mgr.nameA, out mgr.descA);
-            mgr.buttonsB = BuildFighterCard(root, "PlayerCardB", "CPU  ·  VANGUARDA IDEOLÓGICA",
+                out mgr.portraitA, out mgr.nameA, out mgr.descA, out mgr.tagTextA);
+            mgr.buttonsB = BuildFighterCard(root, "PlayerCardB", "CPU 2  ·  VANGUARDA IDEOLÓGICA",
                 "ESTILO: PRESSÃO & LONGO ALCANCE", 0.56f, 0.95f, IdeoCrimson, mgr, false,
-                out mgr.portraitB, out mgr.nameB, out mgr.descB);
+                out mgr.portraitB, out mgr.nameB, out mgr.descB, out mgr.tagTextB);
+
+            BuildControlModeBar(root, "ControlBarA", 0.05f, 0.44f, mgr, isA: true,
+                out mgr.p1HumanBtn, out mgr.p1AIBtn);
+            BuildControlModeBar(root, "ControlBarB", 0.56f, 0.95f, mgr, isA: false,
+                out mgr.p2HumanBtn, out mgr.p2AIBtn);
+            mgr.p1IsAI = false;
+            mgr.p2IsAI = true;
 
             // Ornate VS medallion
             Image vsCrest = AddFramedPanel(root, "VSCrest", BurgundyPanel, BrightGold, false);
@@ -562,16 +569,16 @@ namespace EcclesiaFighters.EditorTools
 
         static Button[] BuildFighterCard(RectTransform root, string name, string tag, string styleBadge,
             float x0, float x1, Color accent, CharacterSelectManager mgr, bool isA,
-            out Image portrait, out Text nameText, out Text descText)
+            out Image portrait, out Text nameText, out Text descText, out Text tagText)
         {
             Image card = AddFramedPanel(root, name, CardSurface, accent, true);
-            Region(card.rectTransform, x0, 0.19f, x1, 0.845f);
+            Region(card.rectTransform, x0, 0.252f, x1, 0.850f);
 
             // Top faction header strip
             Image tagBar = AddFramedPanel(card.rectTransform, "TagBar",
                 isA ? new Color(0.08f, 0.16f, 0.28f, 0.94f) : BurgundyPanel, accent, false);
             Region(tagBar.rectTransform, 0.03f, 0.90f, 0.97f, 0.975f);
-            Text tagText = AddText(tagBar.rectTransform, "Tag", tag, 22, accent, TextAnchor.MiddleCenter, FontStyle.Bold);
+            tagText = AddText(tagBar.rectTransform, "Tag", tag, 22, accent, TextAnchor.MiddleCenter, FontStyle.Bold);
             Stretch(tagText.rectTransform);
 
             // Recessed portrait frame
@@ -616,6 +623,39 @@ namespace EcclesiaFighters.EditorTools
                 else     UnityEventTools.AddIntPersistentListener(b.onClick, mgr.SelectB, i);
             }
             return pickButtons;
+        }
+
+        static void BuildControlModeBar(RectTransform root, string name, float x0, float x1,
+            CharacterSelectManager mgr, bool isA, out Button humanBtn, out Button aiBtn)
+        {
+            Image bar = AddFramedPanel(root, name, ObsidianPanel, MutedGold, true);
+            Region(bar.rectTransform, x0, 0.184f, x1, 0.242f);
+
+            var hlg = bar.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hlg.padding                = new RectOffset(10, 10, 6, 6);
+            hlg.spacing                = 10f;
+            hlg.childControlWidth      = true;
+            hlg.childControlHeight     = true;
+            hlg.childForceExpandWidth  = true;
+            hlg.childForceExpandHeight = true;
+
+            humanBtn = AddButton(bar.rectTransform, "Btn_Jogador", "JOGADOR", 20, ButtonVariant.Compact);
+            aiBtn    = AddButton(bar.rectTransform, "Btn_IA",      "IA",      20, ButtonVariant.Compact);
+
+            if (isA)
+            {
+                UnityEventTools.AddBoolPersistentListener(humanBtn.onClick, mgr.SetP1IsAI, false);
+                UnityEventTools.AddBoolPersistentListener(aiBtn.onClick,    mgr.SetP1IsAI, true);
+                humanBtn.GetComponent<UIButtonJuice>()?.SetSelected(true);
+                aiBtn.GetComponent<UIButtonJuice>()?.SetSelected(false);
+            }
+            else
+            {
+                UnityEventTools.AddBoolPersistentListener(humanBtn.onClick, mgr.SetP2IsAI, false);
+                UnityEventTools.AddBoolPersistentListener(aiBtn.onClick,    mgr.SetP2IsAI, true);
+                humanBtn.GetComponent<UIButtonJuice>()?.SetSelected(false);
+                aiBtn.GetComponent<UIButtonJuice>()?.SetSelected(true);
+            }
         }
 
         // ═════════════════════════════════════════════════════════════════════
@@ -976,7 +1016,7 @@ namespace EcclesiaFighters.EditorTools
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // Header toggle button
-            Button headerBtn = AddButton(legendRt, "LegendHeaderBtn", "[H] OCULTAR", 17, ButtonVariant.Compact);
+            Button headerBtn = AddButton(legendRt, "LegendHeaderBtn", "[TAB] OCULTAR", 17, ButtonVariant.Compact);
             SetLayoutElement(headerBtn.gameObject, preferredHeight: 30f);
             Text headerTxt = headerBtn.GetComponentInChildren<Text>();
 
@@ -993,13 +1033,13 @@ namespace EcclesiaFighters.EditorTools
             bodyVlg.childForceExpandHeight = false;
 
             Text line1 = AddText(body.rectTransform, "MoveControls",
-                "A/D Mover · W/Espaço Pular · S Agachar · Shift Defender",
+                "A/D Mover · W Pular · S Agachar · SHIFT ESQ Defender",
                 15, Ivory, TextAnchor.MiddleLeft, FontStyle.Bold);
             line1.horizontalOverflow = HorizontalWrapMode.Overflow;
             SetLayoutElement(line1.gameObject, preferredHeight: 24f);
 
             Text line2 = AddText(body.rectTransform, "AttackControls",
-                "J Soco Leve · K Soco Forte · L Chute · U/I Especial",
+                "F Soco Leve · G Soco Forte · H Chute · T Especial",
                 15, BrightGold, TextAnchor.MiddleLeft, FontStyle.Bold);
             line2.horizontalOverflow = HorizontalWrapMode.Overflow;
             SetLayoutElement(line2.gameObject, preferredHeight: 24f);
@@ -1007,7 +1047,7 @@ namespace EcclesiaFighters.EditorTools
             var toggleComp = legendRt.gameObject.AddComponent<ControlsLegendToggle>();
             toggleComp.contentPanel   = body.gameObject;
             toggleComp.toggleHintText = headerTxt;
-            toggleComp.toggleKey      = KeyCode.H;
+            toggleComp.toggleKey      = KeyCode.Tab;
             toggleComp.startExpanded  = true;
 
             UnityEventTools.AddPersistentListener(headerBtn.onClick, toggleComp.Toggle);

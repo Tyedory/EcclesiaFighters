@@ -73,6 +73,7 @@ namespace EcclesiaFighters
         // ── Identity ──────────────────────────────────────────
         [Header("Identity")]
         public string characterName      = "Fighter";
+        public int    playerIndex        = 0;
         [FormerlySerializedAs("isPlayer")]
         public bool   isPlayerControlled = true;
 
@@ -197,6 +198,7 @@ namespace EcclesiaFighters
         static readonly int HashWalkingBack = Animator.StringToHash("WalkingBack");
         static readonly int HashCrouching   = Animator.StringToHash("Crouching");
         static readonly int HashBlocking    = Animator.StringToHash("Blocking");
+        static readonly int HashIsGrounded  = Animator.StringToHash("IsGrounded");
         static readonly int HashJump        = Animator.StringToHash("Jump");
         static readonly int HashLightPunch  = Animator.StringToHash("LightPunch");
         static readonly int HashHeavyPunch  = Animator.StringToHash("HeavyPunch");
@@ -342,8 +344,9 @@ namespace EcclesiaFighters
         /// Strips any FighterAI components when playerControlled is true, or ensures one is
         /// attached and enabled when playerControlled is false.
         /// </summary>
-        public FighterAI ConfigureControlOwnership(bool playerControlled)
+        public FighterAI ConfigureControlOwnership(bool playerControlled, int slotIndex = -1)
         {
+            if (slotIndex >= 0) playerIndex = slotIndex;
             isPlayerControlled = playerControlled;
             aiWantsBlock       = false;
             aiWantsCrouch      = false;
@@ -486,6 +489,7 @@ namespace EcclesiaFighters
 
             if (dead)
             {
+                AnimBool(HashIsGrounded, grounded);
                 UpdatePlaceholderVisuals();
                 return;
             }
@@ -495,6 +499,7 @@ namespace EcclesiaFighters
                 SetWalking(false, false);
                 SetBlocking(false);
                 SetCrouching(false);
+                AnimBool(HashIsGrounded, grounded);
                 UpdatePlaceholderVisuals();
                 return;
             }
@@ -506,6 +511,7 @@ namespace EcclesiaFighters
 
             if (!isAttacking && hitstunTimer <= 0f) FaceOpponent();
             ClampStagePosition();
+            AnimBool(HashIsGrounded, grounded);
             UpdatePlaceholderVisuals();
         }
 
@@ -513,6 +519,7 @@ namespace EcclesiaFighters
         {
             if (jumpGraceTimer <= 0f)
                 grounded = (Time.time - lastGroundContactTime) < 0.08f || CheckFeetGrounded();
+            AnimBool(HashIsGrounded, grounded);
 
             if (rb)
             {
@@ -556,6 +563,8 @@ namespace EcclesiaFighters
 
         void HandlePlayerInput()
         {
+            if (!isPlayerControlled) return;
+
             if (hitstunTimer > 0f)
             {
                 holdingAway      = false;
@@ -566,17 +575,26 @@ namespace EcclesiaFighters
                 return;
             }
 
-            if (Input.GetKeyDown(keyCrouch) || Input.GetKeyDown(KeyCode.DownArrow) ||
-                Input.GetKeyDown(keyJump)   || Input.GetKeyDown(keyJumpAlt) || Input.GetKeyDown(KeyCode.UpArrow))
+            KeyCode kLeft       = KeybindManager.GetKey(playerIndex, FighterAction.MoveLeft);
+            KeyCode kRight      = KeybindManager.GetKey(playerIndex, FighterAction.MoveRight);
+            KeyCode kJump       = KeybindManager.GetKey(playerIndex, FighterAction.Jump);
+            KeyCode kCrouch     = KeybindManager.GetKey(playerIndex, FighterAction.Crouch);
+            KeyCode kBlock      = KeybindManager.GetKey(playerIndex, FighterAction.Block);
+            KeyCode kLightPunch = KeybindManager.GetKey(playerIndex, FighterAction.LightPunch);
+            KeyCode kHeavyPunch = KeybindManager.GetKey(playerIndex, FighterAction.HeavyPunch);
+            KeyCode kKick       = KeybindManager.GetKey(playerIndex, FighterAction.Kick);
+            KeyCode kSpecial    = KeybindManager.GetKey(playerIndex, FighterAction.Special);
+
+            if (Input.GetKeyDown(kCrouch) || Input.GetKeyDown(kJump))
                 devForceCrouch = false;
 
-            if (Input.GetKeyDown(keyBlock) || Input.GetKeyDown(KeyCode.RightShift))
+            if (Input.GetKeyDown(kBlock))
                 devForceBlock = false;
 
-            // Read directional & posture inputs
+            // Read directional & posture inputs via KeybindManager (isolated per playerIndex)
             float dir = 0f;
-            if (Input.GetKey(keyLeft)  || Input.GetKey(KeyCode.LeftArrow))  dir -= 1f;
-            if (Input.GetKey(keyRight) || Input.GetKey(KeyCode.RightArrow)) dir += 1f;
+            if (Input.GetKey(kLeft))  dir -= 1f;
+            if (Input.GetKey(kRight)) dir += 1f;
 
             if (!Mathf.Approximately(dir, 0f))
             {
@@ -589,8 +607,8 @@ namespace EcclesiaFighters
             }
             devWalkJustEnded = false;
 
-            bool crouchHeld = (Input.GetKey(keyCrouch) || Input.GetKey(KeyCode.DownArrow) || devForceCrouch) && grounded;
-            bool shiftBlock = (Input.GetKey(keyBlock)  || Input.GetKey(KeyCode.RightShift) || devForceBlock) && grounded;
+            bool crouchHeld = (Input.GetKey(kCrouch) || devForceCrouch) && grounded;
+            bool shiftBlock = (Input.GetKey(kBlock)  || devForceBlock)  && grounded;
             holdingAway     = grounded && dir != 0f && (dir * FacingDir < 0f);
 
             if (!isAttacking) SetCrouching(crouchHeld);
@@ -598,13 +616,10 @@ namespace EcclesiaFighters
             // Attacks take priority when ready
             if (!isAttacking && attackCooldownTimer <= 0f)
             {
-                if (Input.GetKeyDown(keySpecial1) || Input.GetKeyDown(keySpecial2))
-                {
-                    if (TryStartSpecial()) return;
-                }
-                if (Input.GetKeyDown(keyLightPunch)) { TryStartMelee(AttackType.LightPunch); return; }
-                if (Input.GetKeyDown(keyHeavyPunch)) { TryStartMelee(AttackType.HeavyPunch); return; }
-                if (Input.GetKeyDown(keyKick))       { TryStartMelee(AttackType.Kick);       return; }
+                if (Input.GetKeyDown(kSpecial))    { if (TryStartSpecial()) return; }
+                if (Input.GetKeyDown(kLightPunch)) { TryStartMelee(AttackType.LightPunch); return; }
+                if (Input.GetKeyDown(kHeavyPunch)) { TryStartMelee(AttackType.HeavyPunch); return; }
+                if (Input.GetKeyDown(kKick))       { TryStartMelee(AttackType.Kick);       return; }
             }
 
             if (isAttacking)
@@ -619,15 +634,15 @@ namespace EcclesiaFighters
             bool blockActive   = shiftBlock || autoAwayBlock;
             SetBlocking(blockActive);
 
-            // Jump (allowed when standing and not actively shift-blocking)
-            bool jumpPressed = Input.GetKeyDown(keyJump) || Input.GetKeyDown(keyJumpAlt) || Input.GetKeyDown(KeyCode.UpArrow);
+            // Jump (allowed when standing and not actively holding block)
+            bool jumpPressed = Input.GetKeyDown(kJump);
             if (jumpPressed && grounded && !crouching && !shiftBlock)
             {
                 DoJump();
                 return;
             }
 
-            // Horizontal walk / crouch-walk (shift-block holds position)
+            // Horizontal walk / crouch-walk (holding block holds position)
             if (dir != 0f && !shiftBlock && !autoAwayBlock)
                 Move(dir);
             else
@@ -690,6 +705,7 @@ namespace EcclesiaFighters
                 rb.velocity = v;
                 rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
             }
+            AnimBool(HashIsGrounded, false);
             AnimTrigger(HashJump);
         }
 
@@ -1439,6 +1455,7 @@ namespace EcclesiaFighters
             AnimBool(HashWalkingBack, false);
             AnimBool(HashCrouching,   false);
             AnimBool(HashBlocking,    false);
+            AnimBool(HashIsGrounded,  grounded);
             foreach (var kv in animParams)
                 if (kv.Value == AnimatorControllerParameterType.Trigger) anim.ResetTrigger(kv.Key);
 
