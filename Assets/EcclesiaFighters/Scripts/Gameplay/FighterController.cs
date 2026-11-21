@@ -540,7 +540,7 @@ namespace EcclesiaFighters
             if (Mathf.Approximately(dir, 0f)) { SetWalking(false, false); return; }
 
             float speed = moveSpeed;
-            bool isForward = dir * FacingDir >= 0f;
+            bool isForward = (dir * FacingDir) > 0f;
             if (crouching)       speed *= crouchSpeedMultiplier;
             else if (!isForward) speed *= backWalkSpeedMultiplier;
 
@@ -659,7 +659,7 @@ namespace EcclesiaFighters
                 attackPhaseT = activeElapsed / activeDur;
                 Vector3 hitCenter = GetMeleeHitboxCenter(type, spec);
 
-                if (!indicatorSpawned && usePlaceholderVisuals)
+                if (!indicatorSpawned && usePlaceholderVisuals && !animReady)
                 {
                     indicatorSpawned = true;
                     SpawnHitIndicator(hitCenter, spec.hitHalfExtents, type);
@@ -1014,11 +1014,13 @@ namespace EcclesiaFighters
                 if (placeholderWasActive) ResetVisualPose();
                 return;
             }
-            placeholderWasActive = true;
 
             // 1) Pose transform (crouch squash, attack tilt/lunge, hitstun/KO lean)
-            if (hasVisualRoot)
+            //    Automatically skipped when a real AnimatorController drives the rig.
+            if (hasVisualRoot && !animReady)
             {
+                placeholderWasActive = true;
+
                 float targetSquash = crouching ? 0.68f : 1f;
                 float targetTilt   = 0f;
                 float targetLunge  = 0f;
@@ -1062,8 +1064,18 @@ namespace EcclesiaFighters
                 if (dead) footPivotDrop += 0.45f;
                 visualRoot.localPosition = baseVisualLocalPos + localFwd * currentVisualLunge - Vector3.up * footPivotDrop;
             }
+            else if (placeholderWasActive && animReady)
+            {
+                placeholderWasActive = false;
+                if (hasVisualRoot)
+                {
+                    visualRoot.localPosition = baseVisualLocalPos;
+                    visualRoot.localRotation = baseVisualLocalRot;
+                    visualRoot.localScale    = baseVisualLocalScale;
+                }
+            }
 
-            // 2) Tint / flash for hit and block
+            // 2) Tint / flash for hit and block (stays active with or without AnimatorController)
             if (hitFlashTimer > 0f)
             {
                 float pulse = Mathf.PingPong(Time.time * 24f, 1f);
@@ -1186,6 +1198,22 @@ namespace EcclesiaFighters
         void CacheAnimator()
         {
             animParams.Clear();
+            Animator[] allAnims = GetComponentsInChildren<Animator>(true);
+            foreach (Animator a in allAnims)
+                if (a) a.applyRootMotion = false;
+
+            if (anim == null || anim.runtimeAnimatorController == null)
+            {
+                foreach (Animator a in allAnims)
+                {
+                    if (a && a.runtimeAnimatorController != null)
+                    {
+                        anim = a;
+                        break;
+                    }
+                }
+            }
+
             animReady = anim != null && anim.runtimeAnimatorController != null;
             if (!animReady) return;
             foreach (AnimatorControllerParameter p in anim.parameters)
