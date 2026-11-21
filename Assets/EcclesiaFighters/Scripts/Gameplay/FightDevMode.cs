@@ -317,12 +317,27 @@ namespace EcclesiaFighters
             return targetIndex == 0 ? mgr.FighterA : mgr.FighterB;
         }
 
-        /// <summary>Gets puppet target and automatically disables FighterAI when commanding P2.</summary>
+        /// <summary>Gets puppet target, keeps P1 strictly AI-free, and auto-disables FighterAI on P2.</summary>
         FighterController PreparePuppetTarget()
         {
             FighterController target = GetTargetFighter();
-            if (targetIndex == 1 && target)
+            if (!target) return null;
+
+            if (targetIndex == 0)
             {
+                // P1 must never have a stray FighterAI running
+                target.isPlayerControlled = true;
+                foreach (FighterAI stray in target.GetComponents<FighterAI>())
+                {
+                    if (!stray) continue;
+                    stray.enabled = false;
+                    stray.StopAllCoroutines();
+                    Destroy(stray);
+                }
+            }
+            else
+            {
+                target.isPlayerControlled = false;
                 var ai = target.GetComponent<FighterAI>();
                 if (ai && ai.enabled)
                 {
@@ -335,10 +350,15 @@ namespace EcclesiaFighters
 
         void ToggleAI()
         {
+            // P1 must never have AI enabled
+            FighterController a = mgr ? mgr.FighterA : null;
+            if (a) a.ConfigureControlOwnership(playerControlled: true);
+
+            // Bind AI toggle strictly to Fighter B (P2) regardless of character prefab
             FighterController b = mgr ? mgr.FighterB : null;
             if (!b) return;
-            var ai = b.GetComponent<FighterAI>();
-            if (!ai) return;
+            b.isPlayerControlled = false;
+            var ai = b.GetComponent<FighterAI>() ?? b.gameObject.AddComponent<FighterAI>();
 
             ai.enabled = !ai.enabled;
             if (!ai.enabled) b.DevClearOverrides();
@@ -450,9 +470,10 @@ namespace EcclesiaFighters
                 }
                 else
                 {
+                    string slot  = targetIndex == 0 ? "P1" : "P2";
                     string mode  = tgt.HasAnimatorController ? "Humanoid Animator" : "Placeholder Visuals";
                     string state = tgt.IsDead ? "DEAD" : (tgt.IsAttacking ? tgt.CurrentAttack.ToString() : "Ready");
-                    targetStatusText.text  = $"{tgt.characterName}  •  [{mode}]  •  {state}";
+                    targetStatusText.text  = $"{slot}: {tgt.characterName}  •  [{mode}]  •  {state}";
                     targetStatusText.color = tgt.HasAnimatorController ? ColTextGold : ColTextLight;
                 }
             }

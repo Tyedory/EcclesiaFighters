@@ -125,28 +125,38 @@ namespace EcclesiaFighters
 
         IEnumerator SpawnFighters(int idxA, int idxB)
         {
-            objA = Instantiate(characterPrefabs[Clamp(idxA)], spawnA.position, Quaternion.Euler(0, 90,0));
-            objB = Instantiate(characterPrefabs[Clamp(idxB)], spawnB.position, Quaternion.Euler(0,-90,0));
+            int cleanA = Clamp(idxA);
+            int cleanB = Clamp(idxB);
+
+            objA = Instantiate(characterPrefabs[cleanA], spawnA.position, Quaternion.Euler(0, 90, 0));
+            objB = Instantiate(characterPrefabs[cleanB], spawnB.position, Quaternion.Euler(0, -90, 0));
+            objA.name = $"{NAMES[cleanA]}_P1";
+            objB.name = $"{NAMES[cleanB]}_P2";
+
             ctrlA = objA.GetComponent<FighterController>();
             ctrlB = objB.GetComponent<FighterController>();
 
             if (ctrlA)
             {
-                ctrlA.isPlayer    = true;
-                ctrlA.opponent    = objB.transform;
-                ctrlA.hpBar       = hpBarA;
-                ctrlA.OnKO        += () => EndRound(false);
+                ctrlA.characterName = NAMES[cleanA];
+                ctrlA.ConfigureControlOwnership(playerControlled: true);
+                ctrlA.opponent      = objB.transform;
+                ctrlA.hpBar         = hpBarA;
+                ctrlA.FaceDirection(+1);
+                ctrlA.OnKO         += () => EndRound(false);
                 ctrlA.SetInputEnabled(false);
-                if (nameTagA) nameTagA.text = NAMES[Clamp(idxA)];
+                if (nameTagA) nameTagA.text = NAMES[cleanA];
             }
             if (ctrlB)
             {
-                ctrlB.isPlayer    = false;      // AI-controlled
-                ctrlB.opponent    = objA.transform;
-                ctrlB.hpBar       = hpBarB;
-                ctrlB.OnKO        += () => EndRound(true);
+                ctrlB.characterName = NAMES[cleanB];
+                ctrlB.ConfigureControlOwnership(playerControlled: false);
+                ctrlB.opponent      = objA.transform;
+                ctrlB.hpBar         = hpBarB;
+                ctrlB.FaceDirection(-1);
+                ctrlB.OnKO         += () => EndRound(true);
                 ctrlB.SetInputEnabled(false);
-                if (nameTagB) nameTagB.text = NAMES[Clamp(idxB)];
+                if (nameTagB) nameTagB.text = NAMES[cleanB];
             }
             yield return null;
         }
@@ -189,8 +199,8 @@ namespace EcclesiaFighters
         IEnumerator RoundResult(bool aWins)
         {
             yield return (showCenterRoutine = StartCoroutine(ShowCenter("K.O.", 1.1f, 1.2f)));
-            string winnerName = aWins ? (ctrlA ? ctrlA.characterName : "Jogador A")
-                                      : (ctrlB ? ctrlB.characterName : "Karl Marx");
+            string winnerName = aWins ? (ctrlA ? ctrlA.characterName : "Jogador 1")
+                                      : (ctrlB ? ctrlB.characterName : "Jogador 2");
             yield return (showCenterRoutine = StartCoroutine(ShowCenter(winnerName.ToUpper() + " VENCE!", 1.8f, 1f)));
             yield return new WaitForSeconds(0.5f);
 
@@ -199,8 +209,8 @@ namespace EcclesiaFighters
             else
             {
                 round++;
-                ctrlA?.ResetFighter(); objA.transform.position = spawnA.position; objA.transform.rotation = Quaternion.Euler(0, 90,0);
-                ctrlB?.ResetFighter(); objB.transform.position = spawnB.position; objB.transform.rotation = Quaternion.Euler(0,-90,0);
+                ctrlA?.ResetFighter(); objA.transform.position = spawnA.position; objA.transform.rotation = Quaternion.Euler(0, 90,0); ctrlA?.FaceDirection(+1);
+                ctrlB?.ResetFighter(); objB.transform.position = spawnB.position; objB.transform.rotation = Quaternion.Euler(0,-90,0); ctrlB?.FaceDirection(-1);
                 fighterCamera?.SnapToTargets();
                 yield return RoundIntro();
                 StartRound();
@@ -209,7 +219,8 @@ namespace EcclesiaFighters
 
         IEnumerator GameOver(bool aWins)
         {
-            string winner = aWins ? (ctrlA ? ctrlA.characterName : "Agostinho") : "Karl Marx";
+            string winner = aWins ? (ctrlA ? ctrlA.characterName : "Jogador 1")
+                                  : (ctrlB ? ctrlB.characterName : "Jogador 2");
             yield return (showCenterRoutine = StartCoroutine(ShowCenter(winner.ToUpper() + "\nVITÓRIA TOTAL!", 3f, 1.2f)));
             yield return FadeFloat(v => fadeOverlay.color = new Color(0,0,0,v), 0, 1, 0.6f);
             SceneManager.LoadScene("TitleScreen");
@@ -245,12 +256,14 @@ namespace EcclesiaFighters
                 var rbA = objA.GetComponent<Rigidbody>();
                 if (rbA) rbA.velocity = Vector3.zero;
                 objA.transform.SetPositionAndRotation(spawnA.position, Quaternion.Euler(0f, 90f, 0f));
+                ctrlA?.FaceDirection(+1);
             }
             if (objB && spawnB)
             {
                 var rbB = objB.GetComponent<Rigidbody>();
                 if (rbB) rbB.velocity = Vector3.zero;
                 objB.transform.SetPositionAndRotation(spawnB.position, Quaternion.Euler(0f, -90f, 0f));
+                ctrlB?.FaceDirection(-1);
             }
 
             ctrlA?.SetInputEnabled(true);

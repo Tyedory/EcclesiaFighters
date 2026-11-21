@@ -51,6 +51,11 @@ namespace EcclesiaFighters
 
         void OnEnable()
         {
+            if (self && self.isPlayerControlled)
+            {
+                enabled = false;
+                return;
+            }
             ConfigDifficulty();
             if (thinkRoutine != null) StopCoroutine(thinkRoutine);
             thinkRoutine = StartCoroutine(Think());
@@ -59,12 +64,24 @@ namespace EcclesiaFighters
         void OnDisable()
         {
             if (thinkRoutine != null) { StopCoroutine(thinkRoutine); thinkRoutine = null; }
+            if (self && !self.isPlayerControlled)
+            {
+                self.AIMoveDir(0f);
+                self.AISetBlock(false);
+                self.AISetCrouch(false);
+            }
         }
 
         void Update()
         {
             if (defenseCheckCd > 0f) defenseCheckCd -= Time.deltaTime;
-            if (!self || self.IsDead || !self.opponent) return;
+            if (!self) return;
+            if (self.isPlayerControlled)
+            {
+                enabled = false;
+                return;
+            }
+            if (self.IsDead || !self.opponent) return;
 
             float diff = self.opponent.position.x - transform.position.x;
             if (Mathf.Abs(diff) >= 0.05f && !self.IsAttacking && !self.IsInHitstun)
@@ -134,6 +151,12 @@ namespace EcclesiaFighters
         {
             while (true)
             {
+                if (self && self.isPlayerControlled)
+                {
+                    enabled = false;
+                    yield break;
+                }
+
                 if (!self || self.IsDead || !self.InputEnabled || !self.opponent)
                 {
                     if (self)

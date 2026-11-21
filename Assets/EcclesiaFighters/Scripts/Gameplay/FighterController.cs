@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace EcclesiaFighters
@@ -71,8 +72,16 @@ namespace EcclesiaFighters
 
         // ── Identity ──────────────────────────────────────────
         [Header("Identity")]
-        public string characterName = "Fighter";
-        public bool   isPlayer      = true;
+        public string characterName      = "Fighter";
+        [FormerlySerializedAs("isPlayer")]
+        public bool   isPlayerControlled = true;
+
+        /// <summary>Backwards-compatible alias for isPlayerControlled.</summary>
+        public bool isPlayer
+        {
+            get => isPlayerControlled;
+            set => isPlayerControlled = value;
+        }
 
         // ── Stats & Movement ──────────────────────────────────
         [Header("Stats & Movement")]
@@ -120,7 +129,7 @@ namespace EcclesiaFighters
         public float muzzleForwardOffset = 0.55f;
 
         // ── Controls (Player 1 defaults) ──────────────────────
-        [Header("Controls — ignored when isPlayer=false")]
+        [Header("Controls — ignored when isPlayerControlled=false")]
         public KeyCode keyLeft       = KeyCode.A;
         public KeyCode keyRight      = KeyCode.D;
         public KeyCode keyJump       = KeyCode.W;
@@ -318,6 +327,38 @@ namespace EcclesiaFighters
             }
         }
 
+        /// <summary>
+        /// Enforces strict P1 (human) vs P2 (CPU AI) ownership regardless of prefab defaults.
+        /// Strips any FighterAI components when playerControlled is true, or ensures one is
+        /// attached and enabled when playerControlled is false.
+        /// </summary>
+        public FighterAI ConfigureControlOwnership(bool playerControlled)
+        {
+            isPlayerControlled = playerControlled;
+            aiWantsBlock       = false;
+            aiWantsCrouch      = false;
+            holdingAway        = false;
+            SetWalking(false, false);
+            SetCrouching(false);
+            SetBlocking(false);
+
+            if (playerControlled)
+            {
+                foreach (FighterAI existing in GetComponents<FighterAI>())
+                {
+                    if (!existing) continue;
+                    existing.enabled = false;
+                    existing.StopAllCoroutines();
+                    Destroy(existing);
+                }
+                return null;
+            }
+
+            var ai = GetComponent<FighterAI>() ?? gameObject.AddComponent<FighterAI>();
+            ai.enabled = true;
+            return ai;
+        }
+
         // ══════════════════════════════════════════════════════
         //  Facing
         // ══════════════════════════════════════════════════════
@@ -360,6 +401,7 @@ namespace EcclesiaFighters
         // ══════════════════════════════════════════════════════
         public void AIMoveDir(float dir)
         {
+            if (isPlayerControlled) return;
             if (!CanAct()) { SetWalking(false, false); return; }
             if (Mathf.Abs(dir) < 0.01f || blocking)
                 SetWalking(false, false);
@@ -369,17 +411,19 @@ namespace EcclesiaFighters
 
         public void AIJump()
         {
+            if (isPlayerControlled) return;
             if (CanAct() && grounded && !crouching && !blocking) DoJump();
         }
 
-        public void AILightPunch() { TryStartMelee(AttackType.LightPunch); }
-        public void AIHeavyPunch() { TryStartMelee(AttackType.HeavyPunch); }
-        public void AIPunch()      { TryStartMelee(AttackType.LightPunch); }
-        public void AIKick()       { TryStartMelee(AttackType.Kick); }
-        public void AISpecial()    { TryStartSpecial(); }
+        public void AILightPunch() { if (!isPlayerControlled) TryStartMelee(AttackType.LightPunch); }
+        public void AIHeavyPunch() { if (!isPlayerControlled) TryStartMelee(AttackType.HeavyPunch); }
+        public void AIPunch()      { if (!isPlayerControlled) TryStartMelee(AttackType.LightPunch); }
+        public void AIKick()       { if (!isPlayerControlled) TryStartMelee(AttackType.Kick); }
+        public void AISpecial()    { if (!isPlayerControlled) TryStartSpecial(); }
 
         public void AISetBlock(bool v)
         {
+            if (isPlayerControlled) return;
             aiWantsBlock = v;
             if (dead || !inputEnabled) { SetBlocking(false); return; }
             if (v && !isAttacking && hitstunTimer <= 0f && grounded)
@@ -395,6 +439,7 @@ namespace EcclesiaFighters
 
         public void AISetCrouch(bool v)
         {
+            if (isPlayerControlled) return;
             aiWantsCrouch = v;
             if (dead || !inputEnabled) { SetCrouching(false); return; }
             SetCrouching(v && grounded && !isAttacking && hitstunTimer <= 0f);
@@ -444,7 +489,7 @@ namespace EcclesiaFighters
                 return;
             }
 
-            if (isPlayer)
+            if (isPlayerControlled)
                 HandlePlayerInput();
             else
                 RefreshAIStates();
