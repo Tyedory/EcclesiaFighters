@@ -490,6 +490,8 @@ namespace EcclesiaFighters
         // ══════════════════════════════════════════════════════
         void Update()
         {
+            if (Time.timeScale <= 0f || FightOverlayController.IsPaused) return;
+
             float dt = Time.deltaTime;
             if (spCooldown          > 0f) spCooldown          -= dt;
             if (attackCooldownTimer > 0f) attackCooldownTimer -= dt;
@@ -597,7 +599,7 @@ namespace EcclesiaFighters
 
         void HandlePlayerInput()
         {
-            if (!isPlayerControlled) return;
+            if (!isPlayerControlled || FightOverlayController.IsAnyModalOpen) return;
 
             if (hitstunTimer > 0f)
             {

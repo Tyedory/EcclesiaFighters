@@ -75,6 +75,7 @@ namespace EcclesiaFighters
 
         void Update()
         {
+            if (Time.timeScale <= 0f || FightOverlayController.IsAnyModalOpen) return;
             if (defenseCheckCd > 0f) defenseCheckCd -= Time.deltaTime;
             if (!self) return;
             if (self.isPlayerControlled)
@@ -156,6 +157,12 @@ namespace EcclesiaFighters
                 {
                     enabled = false;
                     yield break;
+                }
+
+                if (Time.timeScale <= 0f || FightOverlayController.IsAnyModalOpen)
+                {
+                    yield return null;
+                    continue;
                 }
 
                 if (!self || self.IsDead || !self.InputEnabled || !self.opponent)

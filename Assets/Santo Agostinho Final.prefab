@@ -139,7 +139,7 @@ MonoBehaviour:
   stageMaxX: 8.5
   lightPunch:
     damage: 8
-    startup: 0.14
+    startup: 0.11
     active: 0.09
     recovery: 0.14
     cooldown: 0.08
@@ -179,7 +179,7 @@ MonoBehaviour:
   chestHeightRatio: 0.7
   fallbackChestHeight: 1.3
   muzzleForwardOffset: 0.5
-  lightPunchStartup: 0.14
+  lightPunchStartup: 0.11
   heavyPunchStartup: 0.23
   kickStartup: 0.21
   specialSpawnDelay: 0.36
@@ -373,7 +373,7 @@ PrefabInstance:
     - target: {fileID: 2664098864995057252, guid: d4389f2bd74c0bc4faddb42eb3452da4, type: 3}
       propertyPath: m_Materials.Array.data[0]
       value: 
-      objectReference: {fileID: 2100000, guid: cf94d42444b6d3b47a9a417893a4f5d2, type: 2}
+      objectReference: {fileID: 2100000, guid: b86e06e8f7d5efc478f69fe0d58514d8, type: 2}
     - target: {fileID: 5866666021909216657, guid: d4389f2bd74c0bc4faddb42eb3452da4, type: 3}
       propertyPath: m_Controller
       value: 

@@ -90,7 +90,7 @@ namespace EcclesiaFighters
             {
                 if (panelOpen) SetPanelOpen(false);
                 CleanupVisualizers();
-                if (!Mathf.Approximately(Time.timeScale, 1f)) Time.timeScale = 1f;
+                if (!Mathf.Approximately(Time.timeScale, 1f) && !FightOverlayController.IsPaused) Time.timeScale = 1f;
                 return;
             }
 
@@ -364,7 +364,10 @@ namespace EcclesiaFighters
 
         void SetGameSpeed(float speed)
         {
-            Time.timeScale = speed;
+            if (FightOverlayController.IsPaused)
+                FightOverlayController.SetResumeTimeScale(speed);
+            else
+                Time.timeScale = speed;
             FinishClick();
         }
 
@@ -435,9 +438,10 @@ namespace EcclesiaFighters
             SetToggleStyle(freezeTimerBtn, freezeTimerLbl, mgr.freezeTimer, "TIMER: FROZEN", "TIMER: RUNNING");
 
             // Game Speed
-            SetTierStyle(speed1Btn,       speed1Lbl,       Mathf.Abs(Time.timeScale - 1.00f) < 0.05f);
-            SetTierStyle(speedHalfBtn,    speedHalfLbl,    Mathf.Abs(Time.timeScale - 0.50f) < 0.05f);
-            SetTierStyle(speedQuarterBtn, speedQuarterLbl, Mathf.Abs(Time.timeScale - 0.25f) < 0.05f);
+            float activeSpeed = FightOverlayController.IsPaused ? FightOverlayController.SavedResumeTimeScale : Time.timeScale;
+            SetTierStyle(speed1Btn,       speed1Lbl,       Mathf.Abs(activeSpeed - 1.00f) < 0.05f);
+            SetTierStyle(speedHalfBtn,    speedHalfLbl,    Mathf.Abs(activeSpeed - 0.50f) < 0.05f);
+            SetTierStyle(speedQuarterBtn, speedQuarterLbl, Mathf.Abs(activeSpeed - 0.25f) < 0.05f);
 
             // Infinite HP
             bool infA = a && a.infiniteHP;

@@ -1105,7 +1105,7 @@ namespace EcclesiaFighters.EditorTools
         static void BuildControlsLegend(RectTransform hudRt)
         {
             RectTransform legendRt = NewRect("ControlsLegend", hudRt);
-            Place(legendRt, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(28f, 22f), new Vector2(560f, 118f));
+            Place(legendRt, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(28f, 22f), new Vector2(660f, 122f));
 
             var vlg = legendRt.gameObject.AddComponent<VerticalLayoutGroup>();
             vlg.spacing = 4f;
@@ -1119,16 +1119,22 @@ namespace EcclesiaFighters.EditorTools
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // Header toggle button
-            Button headerBtn = AddButton(legendRt, "LegendHeaderBtn", "[TAB] OCULTAR", 17, ButtonVariant.Compact);
+            Button headerBtn = AddButton(legendRt, "LegendHeaderBtn", "[TAB] OCULTAR  ·  [ESC] PAUSAR", 16, ButtonVariant.Compact);
             SetLayoutElement(headerBtn.gameObject, preferredHeight: 30f);
             Text headerTxt = headerBtn.GetComponentInChildren<Text>();
+            if (headerTxt)
+            {
+                headerTxt.resizeTextForBestFit = true;
+                headerTxt.resizeTextMinSize    = 11;
+                headerTxt.resizeTextMaxSize    = 16;
+            }
 
-            // Body panel with Portuguese moveset legend
+            // Body panel with Portuguese moveset legend (synced dynamically at runtime from KeybindManager)
             Image body = AddFramedPanel(legendRt, "LegendContent", new Color(0.04f, 0.03f, 0.06f, 0.86f), MutedGold, false);
-            SetLayoutElement(body.gameObject, preferredHeight: 76f);
+            SetLayoutElement(body.gameObject, preferredHeight: 80f);
             var bodyVlg = body.gameObject.AddComponent<VerticalLayoutGroup>();
             bodyVlg.padding = new RectOffset(16, 16, 10, 10);
-            bodyVlg.spacing = 8f;
+            bodyVlg.spacing = 6f;
             bodyVlg.childAlignment = TextAnchor.MiddleLeft;
             bodyVlg.childControlWidth = true;
             bodyVlg.childControlHeight = true;
@@ -1138,14 +1144,22 @@ namespace EcclesiaFighters.EditorTools
             Text line1 = AddText(body.rectTransform, "MoveControls",
                 "A/D Mover · W Pular · S Agachar · SHIFT ESQ Defender",
                 15, Ivory, TextAnchor.MiddleLeft, FontStyle.Bold);
-            line1.horizontalOverflow = HorizontalWrapMode.Overflow;
-            SetLayoutElement(line1.gameObject, preferredHeight: 24f);
+            line1.resizeTextForBestFit = true;
+            line1.resizeTextMinSize    = 10;
+            line1.resizeTextMaxSize    = 15;
+            line1.horizontalOverflow   = HorizontalWrapMode.Wrap;
+            line1.verticalOverflow     = VerticalWrapMode.Truncate;
+            SetLayoutElement(line1.gameObject, preferredHeight: 26f).minHeight = 24f;
 
             Text line2 = AddText(body.rectTransform, "AttackControls",
                 "F Soco Leve · G Soco Forte · H Chute · T Especial",
                 15, BrightGold, TextAnchor.MiddleLeft, FontStyle.Bold);
-            line2.horizontalOverflow = HorizontalWrapMode.Overflow;
-            SetLayoutElement(line2.gameObject, preferredHeight: 24f);
+            line2.resizeTextForBestFit = true;
+            line2.resizeTextMinSize    = 10;
+            line2.resizeTextMaxSize    = 15;
+            line2.horizontalOverflow   = HorizontalWrapMode.Wrap;
+            line2.verticalOverflow     = VerticalWrapMode.Truncate;
+            SetLayoutElement(line2.gameObject, preferredHeight: 26f).minHeight = 24f;
 
             var toggleComp = legendRt.gameObject.AddComponent<ControlsLegendToggle>();
             toggleComp.contentPanel   = body.gameObject;

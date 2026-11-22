@@ -53,12 +53,15 @@ namespace EcclesiaFighters
         public FighterController FighterA      => ctrlA;
         public FighterController FighterB      => ctrlB;
         public bool              IsRoundActive => roundActive;
+        public bool              CanPauseMatch => roundActive && !inMatchEndFlow;
 
         // ── Runtime ───────────────────────────────────────────
         private FighterController ctrlA, ctrlB;
         private GameObject objA, objB;
+        private FightOverlayController fightOverlay;
         private float  timer;
         private bool   roundActive;
+        private bool   inMatchEndFlow;
         private int    round = 1;
         private int    wA = 0, wB = 0;
         private Coroutine roundResultRoutine;
@@ -118,6 +121,11 @@ namespace EcclesiaFighters
                 dev.Initialize(this);
             }
 
+            fightOverlay = GetComponent<FightOverlayController>() ?? gameObject.AddComponent<FightOverlayController>();
+            fightOverlay.Initialize(this);
+            if (hud) hud.alpha = 0f;
+            yield return fightOverlay.ShowPreFightSplashAndWait();
+
             // Intro
             yield return RoundIntro();
             StartRound();
@@ -165,8 +173,9 @@ namespace EcclesiaFighters
 
         void StartRound()
         {
-            timer = roundTime;
-            roundActive = true;
+            timer          = roundTime;
+            roundActive    = true;
+            inMatchEndFlow = false;
             ctrlA?.SetInputEnabled(true);
             ctrlB?.SetInputEnabled(true);
         }
@@ -190,7 +199,9 @@ namespace EcclesiaFighters
         void EndRound(bool aWins)
         {
             if (!roundActive) return;
-            roundActive = false;
+            roundActive    = false;
+            inMatchEndFlow = true;
+            fightOverlay?.ForceClosePauseForEndScreen();
             ctrlA?.SetInputEnabled(false);
             ctrlB?.SetInputEnabled(false);
             if (aWins) wA++; else wB++;
@@ -225,6 +236,7 @@ namespace EcclesiaFighters
                                   : (ctrlB ? ctrlB.characterName : "Jogador 2");
             yield return (showCenterRoutine = StartCoroutine(ShowCenter(winner.ToUpper() + "\nVITÓRIA TOTAL!", 3f, 1.2f)));
             yield return FadeFloat(v => fadeOverlay.color = new Color(0,0,0,v), 0, 1, 0.6f);
+            Time.timeScale = 1f;
             SceneManager.LoadScene("TitleScreen");
         }
 
@@ -248,7 +260,8 @@ namespace EcclesiaFighters
             if (fadeOverlay) fadeOverlay.color = new Color(0f, 0f, 0f, 0f);
 
             if (timer <= 0f) timer = roundTime;
-            roundActive = true;
+            roundActive    = true;
+            inMatchEndFlow = false;
 
             ctrlA?.DevReviveAndResetIdle();
             ctrlB?.DevReviveAndResetIdle();
