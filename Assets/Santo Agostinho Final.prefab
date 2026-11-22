@@ -126,6 +126,9 @@ MonoBehaviour:
   maxHP: 100
   moveSpeed: 4
   backWalkSpeedMultiplier: 0.82
+  doubleTapWindow: 0.28
+  sprintForwardMultiplier: 1.75
+  sprintRetreatMultiplier: 1.45
   crouchSpeedMultiplier: 0.45
   crouchHeightRatio: 0.6
   jumpForce: 11.2

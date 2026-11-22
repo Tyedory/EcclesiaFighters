@@ -89,6 +89,9 @@ namespace EcclesiaFighters
         public float maxHP                   = 100f;
         public float moveSpeed               = 4.5f;
         [Range(0.3f, 1f)] public float backWalkSpeedMultiplier = 0.82f;
+        public float doubleTapWindow         = 0.28f;
+        public float sprintForwardMultiplier = 1.75f;
+        public float sprintRetreatMultiplier = 1.45f;
         [Range(0.2f, 0.9f)] public float crouchSpeedMultiplier = 0.45f;
         [Range(0.4f, 0.85f)] public float crouchHeightRatio    = 0.60f;
         public float jumpForce               = 11.2f;
@@ -182,6 +185,7 @@ namespace EcclesiaFighters
         public AttackType CurrentAttack         => currentAttack;
         public bool       SpecialReady          => spCooldown <= 0f;
         public bool       IsDead                => dead;
+        public bool       IsSprinting           => sprinting;
         public bool       DevCrouchActive       => devForceCrouch;
         public bool       DevBlockActive        => devForceBlock;
         public bool       HasAnimatorController => animReady;
@@ -198,6 +202,8 @@ namespace EcclesiaFighters
         static readonly int HashIdle        = Animator.StringToHash("Idle");
         static readonly int HashWalking     = Animator.StringToHash("Walking");
         static readonly int HashWalkingBack = Animator.StringToHash("WalkingBack");
+        static readonly int HashRunning     = Animator.StringToHash("Running");
+        static readonly int HashRunningBack = Animator.StringToHash("RunningBack");
         static readonly int HashCrouching   = Animator.StringToHash("Crouching");
         static readonly int HashBlocking    = Animator.StringToHash("Blocking");
         static readonly int HashIsGrounded  = Animator.StringToHash("IsGrounded");
@@ -226,6 +232,9 @@ namespace EcclesiaFighters
         bool hasBeenAirborne;
         float lastSpawnOrResetTime, lastLandSfxTime = -10f;
         bool walkingForward, walkingBackward;
+        bool sprinting, runningForward, runningBackward;
+        int  sprintInputDir, lastTappedDir;
+        float lastLeftTapTime = -10f, lastRightTapTime = -10f;
         bool holdingAway, aiWantsBlock, aiWantsCrouch;
         bool devForceCrouch, devForceBlock, devWalkJustEnded;
         float devWalkTimer;
@@ -344,6 +353,7 @@ namespace EcclesiaFighters
 
             if (rb) rb.velocity = Vector3.zero;
 
+            StopSprint();
             SetWalking(false, false);
             SetCrouching(false);
             SetBlocking(false);
@@ -385,6 +395,7 @@ namespace EcclesiaFighters
                 devForceBlock    = false;
                 devWalkJustEnded = false;
                 devWalkTimer     = 0f;
+                StopSprint();
                 SetWalking(false, false);
                 SetCrouching(false);
                 SetBlocking(false);
@@ -630,6 +641,7 @@ namespace EcclesiaFighters
             {
                 holdingAway      = false;
                 devWalkJustEnded = false;
+                StopSprint();
                 SetWalking(false, false);
                 SetCrouching(false);
                 SetBlocking(false);
@@ -657,6 +669,46 @@ namespace EcclesiaFighters
             if (Input.GetKey(kLeft))  dir -= 1f;
             if (Input.GetKey(kRight)) dir += 1f;
 
+            bool crouchHeld = (Input.GetKey(kCrouch) || devForceCrouch) && grounded;
+            bool shiftBlock = (Input.GetKey(kBlock)  || devForceBlock)  && grounded;
+
+            if (Input.GetKeyDown(kLeft))
+            {
+                if ((Time.time - lastLeftTapTime) <= doubleTapWindow && lastTappedDir == -1 && grounded && !crouchHeld && !shiftBlock)
+                {
+                    sprinting      = true;
+                    sprintInputDir = -1;
+                }
+                else if (sprinting && sprintInputDir != -1)
+                {
+                    StopSprint();
+                }
+                lastLeftTapTime = Time.time;
+                lastTappedDir   = -1;
+            }
+            if (Input.GetKeyDown(kRight))
+            {
+                if ((Time.time - lastRightTapTime) <= doubleTapWindow && lastTappedDir == 1 && grounded && !crouchHeld && !shiftBlock)
+                {
+                    sprinting      = true;
+                    sprintInputDir = 1;
+                }
+                else if (sprinting && sprintInputDir != 1)
+                {
+                    StopSprint();
+                }
+                lastRightTapTime = Time.time;
+                lastTappedDir    = 1;
+            }
+
+            if (sprinting)
+            {
+                bool heldMatchingDir = (sprintInputDir == -1 && Input.GetKey(kLeft) && dir < -0.5f)
+                                    || (sprintInputDir ==  1 && Input.GetKey(kRight) && dir > 0.5f);
+                if (!heldMatchingDir || !grounded || crouchHeld || shiftBlock || isAttacking)
+                    StopSprint();
+            }
+
             if (!Mathf.Approximately(dir, 0f))
             {
                 devWalkTimer     = 0f;
@@ -668,13 +720,11 @@ namespace EcclesiaFighters
             }
             devWalkJustEnded = false;
 
-            bool crouchHeld = (Input.GetKey(kCrouch) || devForceCrouch) && grounded;
-            bool shiftBlock = (Input.GetKey(kBlock)  || devForceBlock)  && grounded;
-            holdingAway     = grounded && dir != 0f && (dir * FacingDir < 0f);
+            holdingAway = grounded && dir != 0f && (dir * FacingDir < 0f);
 
             if (!isAttacking) SetCrouching(crouchHeld);
 
-            // Attacks take priority when ready
+            // Attacks take priority when ready (allow crisp sprint-to-attack cancel)
             if (!isAttacking && attackCooldownTimer <= 0f)
             {
                 if (Input.GetKeyDown(kSpecial))    { if (TryStartSpecial()) return; }
@@ -685,17 +735,19 @@ namespace EcclesiaFighters
 
             if (isAttacking)
             {
+                StopSprint();
                 SetWalking(false, false);
                 SetBlocking(false);
                 SetCrouching(crouchHeld);
                 return;
             }
 
-            bool autoAwayBlock = holdingAway && IsThreatApproaching();
+            bool autoAwayBlock = !sprinting && holdingAway && IsThreatApproaching();
             bool blockActive   = shiftBlock || autoAwayBlock;
+            if (blockActive) StopSprint();
             SetBlocking(blockActive);
 
-            // Jump (allowed when standing and not actively holding block)
+            // Jump (allowed when standing and not actively holding block; allows sprint-to-jump cancel)
             bool jumpPressed = Input.GetKeyDown(kJump);
             if (jumpPressed && grounded && !crouching && !shiftBlock)
             {
@@ -703,11 +755,14 @@ namespace EcclesiaFighters
                 return;
             }
 
-            // Horizontal walk / crouch-walk (holding block holds position)
+            // Horizontal walk / sprint / crouch-walk (holding block holds position)
             if (dir != 0f && !shiftBlock && !autoAwayBlock)
                 Move(dir);
             else
+            {
+                StopSprint();
                 SetWalking(false, false);
+            }
         }
 
         bool IsThreatApproaching()
@@ -729,18 +784,36 @@ namespace EcclesiaFighters
 
         void Move(float dir)
         {
-            if (Mathf.Approximately(dir, 0f)) { SetWalking(false, false); return; }
+            if (Mathf.Approximately(dir, 0f)) { StopSprint(); SetWalking(false, false); return; }
 
             float speed = moveSpeed;
-            bool isForward = (dir * FacingDir) > 0f;
+            bool isForward    = (dir * FacingDir) > 0f;
+            bool activeSprint = sprinting && grounded && !crouching && !blocking;
             if (crouching)       speed *= crouchSpeedMultiplier;
+            else if (activeSprint) speed *= isForward ? sprintForwardMultiplier : sprintRetreatMultiplier;
             else if (!isForward) speed *= backWalkSpeedMultiplier;
 
             transform.Translate(Vector3.right * dir * speed * Time.deltaTime, Space.World);
             ClampStagePosition();
 
-            if (grounded) SetWalking(isForward, !isForward);
-            else          SetWalking(false, false);
+            if (grounded)
+            {
+                if (activeSprint && animParams.ContainsKey(HashRunning))
+                {
+                    SetRunning(isForward, !isForward);
+                    SetWalking(false, false);
+                }
+                else
+                {
+                    SetRunning(false, false);
+                    SetWalking(isForward, !isForward);
+                }
+            }
+            else
+            {
+                SetRunning(false, false);
+                SetWalking(false, false);
+            }
         }
 
         void ClampStagePosition()
@@ -756,6 +829,7 @@ namespace EcclesiaFighters
             grounded        = false;
             hasBeenAirborne = true;
             jumpGraceTimer  = 0.12f;
+            StopSprint();
             SetWalking(false, false);
             SetCrouching(false);
             SetBlocking(false);
@@ -858,6 +932,7 @@ namespace EcclesiaFighters
             AttackConfig spec = GetAttackConfig(type);
             isAttacking   = true;
             currentAttack = type;
+            StopSprint();
             SetWalking(false, false);
             SetBlocking(false);
             TriggerAttackAnimation(type);
@@ -908,6 +983,7 @@ namespace EcclesiaFighters
             isAttacking   = true;
             currentAttack = AttackType.Special;
             spCooldown    = specialCooldown;
+            StopSprint();
             SetWalking(false, false);
             SetBlocking(false);
             TriggerAttackAnimation(AttackType.Special);
@@ -994,7 +1070,12 @@ namespace EcclesiaFighters
             if (projRb) projRb.velocity = facing * specialSpeed;
 
             ProjectileDamage pd = proj.GetComponent<ProjectileDamage>();
-            if (pd) { pd.damage = specialDamage; pd.owner = gameObject; }
+            if (pd)
+            {
+                pd.damage = specialDamage;
+                pd.owner  = gameObject;
+                pd.SetTravelDirection(facing);
+            }
 
             AudioManager.PlaySpecialLaunch();
             Destroy(proj, 3f);
@@ -1120,6 +1201,7 @@ namespace EcclesiaFighters
                 dead = true;
                 StopActiveAttack();
                 hitstunTimer = 0f;
+                StopSprint();
                 SetWalking(false, false);
                 SetCrouching(false);
                 SetBlocking(false);
@@ -1137,6 +1219,7 @@ namespace EcclesiaFighters
             else
             {
                 StopActiveAttack();
+                StopSprint();
                 SetWalking(false, false);
                 SetBlocking(false);
                 hitstunTimer  = Mathf.Max(hitstunTimer, hitstunDuration);
@@ -1536,6 +1619,27 @@ namespace EcclesiaFighters
             }
         }
 
+        void SetRunning(bool forward, bool backward)
+        {
+            if (runningForward != forward)
+            {
+                runningForward = forward;
+                AnimBool(HashRunning, forward);
+            }
+            if (runningBackward != backward)
+            {
+                runningBackward = backward;
+                AnimBool(HashRunningBack, backward);
+            }
+        }
+
+        void StopSprint()
+        {
+            sprinting      = false;
+            sprintInputDir = 0;
+            SetRunning(false, false);
+        }
+
         void SetCrouching(bool v)
         {
             if (crouching == v) return;
@@ -1557,6 +1661,8 @@ namespace EcclesiaFighters
             if (!animReady) return;
             AnimBool(HashWalking,     false);
             AnimBool(HashWalkingBack, false);
+            AnimBool(HashRunning,     false);
+            AnimBool(HashRunningBack, false);
             AnimBool(HashCrouching,   false);
             AnimBool(HashBlocking,    false);
             AnimBool(HashIsGrounded,  grounded);

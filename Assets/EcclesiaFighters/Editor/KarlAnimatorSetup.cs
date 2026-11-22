@@ -20,7 +20,10 @@ namespace EcclesiaFighters.EditorTools
         const string BaseModelPath  = AnimDir + "Karl marx.fbx";
         const string ControllerPath = AnimDir + "KarlMarx.controller";
         const string PrefabPath     = "Assets/Karl Marx Final.prefab";
-        const string KarlMatPath    = "Assets/Meshy_AI_Crimson_Manifesto_1003124011_texture_fbx/Meshy_AI_Crimson_Manifesto_1003124011_texture_fbx/Materials/Meshy_AI_Crimson_Manifesto_1003124011_texture.mat";
+        const string KarlMatPath      = "Assets/Meshy_AI_Crimson_Manifesto_1003124011_texture_fbx/Meshy_AI_Crimson_Manifesto_1003124011_texture_fbx/Materials/Meshy_AI_Crimson_Manifesto_1003124011_texture.mat";
+        const string SantoBaseModelPath = "Assets/EcclesiaFighters/Animations/SantoAgostinho/SA.fbx";
+        const string SantoRunningPath   = "Assets/EcclesiaFighters/Animations/SantoAgostinho/running.fbx";
+        const string KarlProjPrefabPath = "Assets/EcclesiaFighters/Models/Projectiles/Karl/KarlSpecialProjectile.prefab";
 
         const string VisualChildName = "KarlMarxVisual";
 
@@ -129,10 +132,14 @@ namespace EcclesiaFighters.EditorTools
                 : CreatePoseClip(untrimmedDying ?? dyingClip, 0.03f, 0.22f, 0.22f, loop: false, gentleBreathing: false, hitPath);
 
             // 4. Build KarlMarx.controller
+            AnimationClip walkFwdClip = LoadPrimaryClip(AnimDir + "Walking.fbx");
+            AnimationClip runClip     = EnsureSharedRunningClip() ?? walkFwdClip;
+
             AnimatorController controller = BuildAnimatorController(
                 idleClip, crouchIdleClip, blockClip, hitClip,
-                LoadPrimaryClip(AnimDir + "Walking.fbx"),
+                walkFwdClip,
                 LoadPrimaryClip(AnimDir + "Walking Backwards.fbx"),
+                runClip,
                 standToCrouchClip,
                 crouchToStandClip,
                 LoadPrimaryClip(AnimDir + "Crouch Walk Forward.fbx"),
@@ -263,6 +270,61 @@ namespace EcclesiaFighters.EditorTools
             }
             Debug.LogWarning("[KarlAnimatorSetup] No AnimationClip found in: " + assetPath);
             return null;
+        }
+
+        static AnimationClip EnsureSharedRunningClip()
+        {
+            if (!File.Exists(SantoRunningPath)) return null;
+
+            var imp = AssetImporter.GetAtPath(SantoRunningPath) as ModelImporter;
+            if (imp != null)
+            {
+                Avatar santoAvatar = AssetDatabase.LoadAssetAtPath<Avatar>(SantoBaseModelPath);
+                bool dirty = false;
+                if (imp.animationType != ModelImporterAnimationType.Human)
+                {
+                    imp.animationType = ModelImporterAnimationType.Human;
+                    dirty = true;
+                }
+                if (santoAvatar != null && (imp.avatarSetup != ModelImporterAvatarSetup.CopyFromOther || imp.sourceAvatar != santoAvatar))
+                {
+                    imp.avatarSetup  = ModelImporterAvatarSetup.CopyFromOther;
+                    imp.sourceAvatar = santoAvatar;
+                    dirty = true;
+                }
+                else if (santoAvatar == null && imp.avatarSetup != ModelImporterAvatarSetup.CreateFromThisModel)
+                {
+                    imp.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
+                    dirty = true;
+                }
+                if (!imp.importAnimation) { imp.importAnimation = true; dirty = true; }
+                if (dirty) imp.SaveAndReimport();
+
+                ModelImporterClipAnimation[] clips = imp.clipAnimations;
+                if (clips == null || clips.Length == 0) clips = imp.defaultClipAnimations;
+                if (clips != null && clips.Length > 0)
+                {
+                    ModelImporterClipAnimation c = clips[0];
+                    if (!c.loopTime || !c.loopPose || c.lockRootPositionXZ || !c.heightFromFeet || c.keepOriginalPositionY || !c.lockRootHeightY)
+                    {
+                        c.loopTime                = true;
+                        c.loopPose                = true;
+                        c.lockRootRotation        = true;
+                        c.keepOriginalOrientation = true;
+                        c.lockRootPositionXZ      = false;
+                        c.keepOriginalPositionXZ  = false;
+                        c.heightFromFeet          = true;
+                        c.keepOriginalPositionY   = false;
+                        c.heightOffset            = 0f;
+                        c.lockRootHeightY         = true;
+                        clips[0] = c;
+                        imp.clipAnimations = clips;
+                        imp.SaveAndReimport();
+                    }
+                }
+            }
+
+            return LoadPrimaryClip(SantoRunningPath);
         }
 
         // ═════════════════════════════════════════════════════════════════════
@@ -430,6 +492,7 @@ namespace EcclesiaFighters.EditorTools
             AnimationClip hitClip,
             AnimationClip walkFwdClip,
             AnimationClip walkBackClip,
+            AnimationClip runClip,
             AnimationClip standToCrouchClip,
             AnimationClip crouchToStandClip,
             AnimationClip crouchWalkFwdClip,
@@ -449,6 +512,8 @@ namespace EcclesiaFighters.EditorTools
             // Exact parameters expected by FighterController.cs
             controller.AddParameter("Walking",     AnimatorControllerParameterType.Bool);
             controller.AddParameter("WalkingBack", AnimatorControllerParameterType.Bool);
+            controller.AddParameter("Running",     AnimatorControllerParameterType.Bool);
+            controller.AddParameter("RunningBack", AnimatorControllerParameterType.Bool);
             controller.AddParameter("Crouching",   AnimatorControllerParameterType.Bool);
             controller.AddParameter("Blocking",    AnimatorControllerParameterType.Bool);
             controller.AddParameter(new AnimatorControllerParameter
@@ -473,6 +538,8 @@ namespace EcclesiaFighters.EditorTools
             AnimatorState stIdle          = AddState(sm, "Idle",              idleClip,          1.00f, new Vector3(260, 0));
             AnimatorState stWalkFwd       = AddState(sm, "WalkForward",       walkFwdClip,       1.00f, new Vector3(520, -90));
             AnimatorState stWalkBack      = AddState(sm, "WalkBackward",      walkBackClip,      1.00f, new Vector3(520, 60));
+            AnimatorState stRunFwd        = AddState(sm, "RunForward",        runClip,           1.00f, new Vector3(520, -165));
+            AnimatorState stRunBack       = AddState(sm, "RunBackward",       runClip,          -1.00f, new Vector3(520, 125));
             AnimatorState stBlocking      = AddState(sm, "Blocking",          blockClip,         0.00f, new Vector3(260, -140));
 
             AnimatorState stStandToCrouch = AddState(sm, "StandingToCrouch",  standToCrouchClip, 1.60f, new Vector3(260, 140));
@@ -491,21 +558,39 @@ namespace EcclesiaFighters.EditorTools
 
             sm.defaultState = stIdle;
 
-            // ── Standing locomotion transitions ──────────────────────
-            AddBoolTransition(stIdle, stWalkFwd,  0.08f, ("Walking", true), ("Crouching", false), ("Blocking", false));
-            AddBoolTransition(stIdle, stWalkBack, 0.08f, ("WalkingBack", true), ("Crouching", false), ("Blocking", false));
+            // ── Standing locomotion transitions (walk & double-tap run) ──
+            AddBoolTransition(stIdle, stWalkFwd,  0.08f, ("Walking", true), ("Running", false), ("Crouching", false), ("Blocking", false));
+            AddBoolTransition(stIdle, stWalkBack, 0.08f, ("WalkingBack", true), ("RunningBack", false), ("Crouching", false), ("Blocking", false));
+            AddBoolTransition(stIdle, stRunFwd,   0.06f, ("Running", true), ("Crouching", false), ("Blocking", false));
+            AddBoolTransition(stIdle, stRunBack,  0.06f, ("RunningBack", true), ("Crouching", false), ("Blocking", false));
 
-            AddBoolTransition(stWalkFwd, stIdle,     0.08f, ("Walking", false), ("WalkingBack", false));
+            AddBoolTransition(stWalkFwd, stRunFwd,   0.06f, ("Running", true));
+            AddBoolTransition(stWalkFwd, stRunBack,  0.06f, ("RunningBack", true));
+            AddBoolTransition(stWalkFwd, stIdle,     0.08f, ("Walking", false), ("WalkingBack", false), ("Running", false), ("RunningBack", false));
             AddBoolTransition(stWalkFwd, stWalkBack, 0.08f, ("WalkingBack", true));
 
-            AddBoolTransition(stWalkBack, stIdle,    0.08f, ("Walking", false), ("WalkingBack", false));
+            AddBoolTransition(stWalkBack, stRunBack, 0.06f, ("RunningBack", true));
+            AddBoolTransition(stWalkBack, stRunFwd,  0.06f, ("Running", true));
+            AddBoolTransition(stWalkBack, stIdle,    0.08f, ("Walking", false), ("WalkingBack", false), ("Running", false), ("RunningBack", false));
             AddBoolTransition(stWalkBack, stWalkFwd, 0.08f, ("Walking", true));
 
+            AddBoolTransition(stRunFwd, stWalkFwd,   0.08f, ("Running", false), ("Walking", true));
+            AddBoolTransition(stRunFwd, stWalkBack,  0.08f, ("Running", false), ("WalkingBack", true));
+            AddBoolTransition(stRunFwd, stRunBack,   0.06f, ("RunningBack", true));
+            AddBoolTransition(stRunFwd, stIdle,      0.08f, ("Running", false), ("RunningBack", false), ("Walking", false), ("WalkingBack", false));
+
+            AddBoolTransition(stRunBack, stWalkBack, 0.08f, ("RunningBack", false), ("WalkingBack", true));
+            AddBoolTransition(stRunBack, stWalkFwd,  0.08f, ("RunningBack", false), ("Walking", true));
+            AddBoolTransition(stRunBack, stRunFwd,   0.06f, ("Running", true));
+            AddBoolTransition(stRunBack, stIdle,     0.08f, ("Running", false), ("RunningBack", false), ("Walking", false), ("WalkingBack", false));
+
             // ── Blocking transitions ─────────────────────────────────
-            AnimatorState[] guardableStates = { stIdle, stWalkFwd, stWalkBack, stCrouchIdle, stCrouchWalkFwd, stCrouchWalkBack };
+            AnimatorState[] guardableStates = { stIdle, stWalkFwd, stWalkBack, stRunFwd, stRunBack, stCrouchIdle, stCrouchWalkFwd, stCrouchWalkBack };
             foreach (AnimatorState st in guardableStates)
                 AddBoolTransition(st, stBlocking, 0.06f, ("Blocking", true));
 
+            AddBoolTransition(stBlocking, stRunFwd,     0.07f, ("Blocking", false), ("Crouching", false), ("Running", true));
+            AddBoolTransition(stBlocking, stRunBack,    0.07f, ("Blocking", false), ("Crouching", false), ("RunningBack", true));
             AddBoolTransition(stBlocking, stWalkFwd,    0.07f, ("Blocking", false), ("Crouching", false), ("Walking", true));
             AddBoolTransition(stBlocking, stWalkBack,   0.07f, ("Blocking", false), ("Crouching", false), ("WalkingBack", true));
             AddBoolTransition(stBlocking, stCrouchIdle, 0.07f, ("Blocking", false), ("Crouching", true));
@@ -515,6 +600,8 @@ namespace EcclesiaFighters.EditorTools
             AddBoolTransition(stIdle,     stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false));
             AddBoolTransition(stWalkFwd,  stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false));
             AddBoolTransition(stWalkBack, stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false));
+            AddBoolTransition(stRunFwd,   stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false));
+            AddBoolTransition(stRunBack,  stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false));
 
             AddBoolTransition(stStandToCrouch, stCrouchToStand, 0.08f, ("Crouching", false));
             AddBoolTransition(stStandToCrouch, stCrouchWalkFwd, 0.08f, ("Crouching", true), ("Walking", true));
@@ -535,6 +622,8 @@ namespace EcclesiaFighters.EditorTools
             AddBoolTransition(stCrouchWalkBack, stCrouchToStand, 0.08f, ("Crouching", false));
 
             AddBoolTransition(stCrouchToStand, stStandToCrouch, 0.08f, ("Crouching", true));
+            AddBoolTransition(stCrouchToStand, stRunFwd,        0.08f, ("Crouching", false), ("Running", true));
+            AddBoolTransition(stCrouchToStand, stRunBack,       0.08f, ("Crouching", false), ("RunningBack", true));
             AddBoolTransition(stCrouchToStand, stWalkFwd,       0.08f, ("Crouching", false), ("Walking", true));
             AddBoolTransition(stCrouchToStand, stWalkBack,      0.08f, ("Crouching", false), ("WalkingBack", true));
             AddExitTransition(stCrouchToStand, stIdle, 0.88f, 0.08f);
@@ -552,9 +641,11 @@ namespace EcclesiaFighters.EditorTools
             // Jump holds airborne pose while IsGrounded == false, returning cleanly on landing
             AddBoolTransition(stJump, stBlocking,   0.08f, ("IsGrounded", true), ("Blocking", true));
             AddBoolTransition(stJump, stCrouchIdle, 0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", true));
+            AddBoolTransition(stJump, stRunFwd,     0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("Running", true));
+            AddBoolTransition(stJump, stRunBack,    0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("RunningBack", true));
             AddBoolTransition(stJump, stWalkFwd,    0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("Walking", true));
             AddBoolTransition(stJump, stWalkBack,   0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("WalkingBack", true));
-            AddBoolTransition(stJump, stIdle,       0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("Walking", false), ("WalkingBack", false));
+            AddBoolTransition(stJump, stIdle,       0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("Walking", false), ("WalkingBack", false), ("Running", false), ("RunningBack", false));
 
             // One-shot attack/hit return transitions (no exit transition on Death so he stays on final frame)
             AnimatorState[] actionStates = { stLightPunch, stHeavyPunch, stKick, stSpecial, stHit };
@@ -722,6 +813,9 @@ namespace EcclesiaFighters.EditorTools
                     fc.specialStartup      = 0.37f;
                     fc.specialActive       = 0.12f;
                     fc.specialRecovery     = 0.50f;
+
+                    GameObject projPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(KarlProjPrefabPath);
+                    if (projPrefab != null) fc.specialPrefab = projPrefab;
 
                     EditorUtility.SetDirty(fc);
                 }

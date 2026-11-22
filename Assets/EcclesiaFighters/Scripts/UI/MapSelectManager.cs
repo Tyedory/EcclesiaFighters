@@ -80,6 +80,7 @@ namespace EcclesiaFighters
 
             EnsureMatchRulesUI();
             RefreshMatchRulesUI();
+            EnforceOverlayLayering();
         }
 
         // ══════════════════════════════════════════════════════
@@ -135,6 +136,7 @@ namespace EcclesiaFighters
 
         IEnumerator FightIntro()
         {
+            EnforceOverlayLayering();
             // Show fight overlay
             fightOverlay.alpha = 0; fightOverlay.gameObject.SetActive(true);
             if (fightMapText != null)   fightMapText.text   = selectedMap == MapID.Exterior ? "Nave Central" : "Altar Sagrado";
@@ -364,6 +366,14 @@ namespace EcclesiaFighters
                 CreateRuleButton(hpRow, "Btn_HPMedium", "MÉDIO", 16, panelSpr, frameSpr, font, SetHPMedium),
                 CreateRuleButton(hpRow, "Btn_HPHigh",   "ALTO",  16, panelSpr, frameSpr, font, SetHPHigh)
             };
+
+            EnforceOverlayLayering();
+        }
+
+        void EnforceOverlayLayering()
+        {
+            if (fightOverlay != null) fightOverlay.transform.SetAsLastSibling();
+            if (fadeOverlay != null)  fadeOverlay.rectTransform.SetAsLastSibling();
         }
 
         static Transform CreateRuleColumn(Transform parent, string name, string title, float flexWidth, Font font, out CanvasGroup group)

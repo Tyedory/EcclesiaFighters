@@ -221,6 +221,9 @@ MonoBehaviour:
   maxHP: 100
   moveSpeed: 4
   backWalkSpeedMultiplier: 0.82
+  doubleTapWindow: 0.28
+  sprintForwardMultiplier: 1.75
+  sprintRetreatMultiplier: 1.45
   crouchSpeedMultiplier: 0.45
   crouchHeightRatio: 0.6
   jumpForce: 11.2
@@ -269,7 +272,7 @@ MonoBehaviour:
   specialActive: 0.12
   specialRecovery: 0.5
   specialSpeed: 16
-  specialPrefab: {fileID: 5879820869292564716, guid: 0569c1f081a11f54aab6e17e456c551a, type: 3}
+  specialPrefab: {fileID: 8738079439170004402, guid: fca347d782d24de4ea0388c9fa8fdade, type: 3}
   firePoint: {fileID: 0}
   chestHeightRatio: 0.7
   fallbackChestHeight: 1.3
@@ -308,6 +311,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   difficulty: 1
+  useMatchConfigDifficulty: 1
   closeRange: 2
   midRange: 5.5
   retreatHP: 0.25

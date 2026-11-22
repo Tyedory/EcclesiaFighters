@@ -833,10 +833,12 @@ namespace EcclesiaFighters.EditorTools
             AddDivider(foFrame.rectTransform, "IntroDivider", AntiqueGold, 0.15f, 0.29f, 0.85f, 0.34f);
             mgr.fightNamesText = AddText(foFrame.rectTransform, "NamesText", "", 44, Ivory, TextAnchor.MiddleCenter, FontStyle.Bold);
             Region(mgr.fightNamesText.rectTransform, 0.05f, 0.08f, 0.95f, 0.28f);
+            fo.SetAsLastSibling();
             fo.gameObject.SetActive(false);
 
             Image fade = AddImage(root, "FadeOverlay", new Color(0f, 0f, 0f, 0f), null, false);
             Stretch(fade.rectTransform);
+            fade.rectTransform.SetAsLastSibling();
             mgr.fadeOverlay = fade;
 
             mgr.titleManager = null;
