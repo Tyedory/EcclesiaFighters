@@ -58,10 +58,10 @@ namespace EcclesiaFighters.EditorTools
                 if (NeedsProjectileSetup())
                     SetupProjectilesBatch(logSummary: true);
 
-                if (ControllerMissingParam(KarlControllerPath, "Running"))
+                if (ControllerMissingParam(KarlControllerPath, "Running") || ControllerMissingParam(KarlControllerPath, "Charging"))
                     KarlAnimatorSetup.SetupKarlMarxBatch();
 
-                if (ControllerMissingParam(SantoControllerPath, "Running"))
+                if (ControllerMissingParam(SantoControllerPath, "Running") || ControllerMissingParam(SantoControllerPath, "Charging"))
                     SantoAnimatorSetup.SetupSantoBatch();
             };
         }

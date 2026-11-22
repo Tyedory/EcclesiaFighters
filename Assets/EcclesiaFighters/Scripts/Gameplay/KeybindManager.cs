@@ -225,7 +225,8 @@ namespace EcclesiaFighters
             return $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.LightPunch))} Soco Leve · " +
                    $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.HeavyPunch))} Soco Forte · " +
                    $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Kick))} Chute · " +
-                   $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Special))} Especial";
+                   $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Special))} Especial · " +
+                   $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Block))}+{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Crouch))} Carregar";
         }
     }
 }

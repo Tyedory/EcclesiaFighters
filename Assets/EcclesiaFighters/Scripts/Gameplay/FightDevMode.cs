@@ -629,6 +629,9 @@ namespace EcclesiaFighters
             CreateButton(rowHeal, "Full Heal Both",  ColBtnBlue, () => { mgr?.DevFullHealBoth(); FinishClick(); });
             CreateButton(rowHeal, "Reset Positions", ColBtnBlue, () => { mgr?.DevResetPositionsAndRevive(); FinishClick(); });
 
+            Transform rowSpecial = CreateRow(sMatch);
+            CreateButton(rowSpecial, "ENCHER ESPECIAL", ColBtnActive, () => { if (mgr != null) mgr.DevFillSpecialBoth(); FinishClick(); });
+
             Transform rowKO = CreateRow(sMatch);
             CreateButton(rowKO, "Insta-Kill P1", ColBtnDanger, () => { mgr?.DevInstaKill(true);  FinishClick(); });
             CreateButton(rowKO, "Insta-Kill P2", ColBtnDanger, () => { mgr?.DevInstaKill(false); FinishClick(); });
@@ -654,7 +657,7 @@ namespace EcclesiaFighters
 
             Transform rowAtk2 = CreateRow(sPuppet);
             CreateButton(rowAtk2, "Kick",    ColBtnIdle, () => RunPuppet(f => f.DevTriggerAttack(FighterController.AttackType.Kick)));
-            CreateButton(rowAtk2, "Special", ColBtnIdle, () => RunPuppet(f => f.DevTriggerAttack(FighterController.AttackType.Special)));
+            CreateButton(rowAtk2, "Special", ColBtnIdle, () => RunPuppet(f => { f.DevFillSpecial(); f.DevTriggerAttack(FighterController.AttackType.Special); }));
             CreateButton(rowAtk2, "Jump",    ColBtnIdle, () => RunPuppet(f => f.DevTriggerJump()));
 
             CreateSubLabel(sPuppet, "Held States & Timed Walk");

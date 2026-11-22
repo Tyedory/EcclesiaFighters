@@ -41,6 +41,7 @@ namespace EcclesiaFighters
         float punishChance         = 0.42f;
         float antiJumpChance       = 0.35f;
         float meleeBlockChance     = 0.14f;
+        float chargeChance         = 0.36f;
 
         FighterController self;
         FighterController opponentCtrl;
@@ -49,7 +50,7 @@ namespace EcclesiaFighters
         float lastSpecialTime  = -10f;
         float defenseCheckCd;
 
-        enum State { Idle, Approach, Retreat, LightPunch, HeavyPunch, Kick, CrouchPoke, Special, Block, Crouch, Jump }
+        enum State { Idle, Approach, Retreat, LightPunch, HeavyPunch, Kick, CrouchPoke, Special, Block, Crouch, Jump, Charge }
         State state = State.Idle;
 
         void Awake()
@@ -87,6 +88,7 @@ namespace EcclesiaFighters
                 self.AIMoveDir(0f);
                 self.AISetBlock(false);
                 self.AISetCrouch(false);
+                self.AISetCharging(false);
             }
         }
 
@@ -125,6 +127,7 @@ namespace EcclesiaFighters
                     punishChance         = 0.10f;
                     antiJumpChance       = 0.10f;
                     meleeBlockChance     = 0.06f;
+                    chargeChance         = 0.08f;
                     break;
                 case Difficulty.Medio:
                     reactionDelay        = 0.28f;
@@ -140,6 +143,7 @@ namespace EcclesiaFighters
                     punishChance         = 0.42f;
                     antiJumpChance       = 0.35f;
                     meleeBlockChance     = 0.14f;
+                    chargeChance         = 0.36f;
                     break;
                 case Difficulty.Dificil:
                     reactionDelay        = 0.12f;
@@ -155,6 +159,7 @@ namespace EcclesiaFighters
                     punishChance         = 0.78f;
                     antiJumpChance       = 0.68f;
                     meleeBlockChance     = 0.18f;
+                    chargeChance         = 0.58f;
                     break;
             }
         }
@@ -169,7 +174,7 @@ namespace EcclesiaFighters
 
         bool CanUseRangedSpecial()
         {
-            return self.SpecialReady && (Time.time - lastSpecialTime >= specialMinInterval);
+            return self.IsSpecialReady && (Time.time - lastSpecialTime >= specialMinInterval);
         }
 
         bool IsIncomingAttackThreat(float dist)
@@ -210,6 +215,7 @@ namespace EcclesiaFighters
                         self.AIMoveDir(0f);
                         self.AISetBlock(false);
                         self.AISetCrouch(false);
+                        self.AISetCharging(false);
                     }
                     yield return null;
                     continue;
@@ -310,11 +316,15 @@ namespace EcclesiaFighters
                 }
             }
 
-            // 2) Mid Range: fire Special selectively or close the gap
+            // 2) Mid Range: fire Special selectively, charge energy safely, or close the gap
             if (dist <= midRange)
             {
                 if (CanUseRangedSpecial() && Random.value < specialMidChance)
                     return State.Special;
+
+                if (dist >= midRange * 0.78f && self.IsGrounded && !self.IsSpecialReady
+                    && !IsIncomingAttackThreat(dist) && Random.value < chargeChance * 0.65f)
+                    return State.Charge;
 
                 float r = Random.value;
                 if (r < 0.72f) return State.Approach;
@@ -322,9 +332,12 @@ namespace EcclesiaFighters
                 return State.Crouch;
             }
 
-            // 3) Long Range: close distance actively, or fire ranged Special
+            // 3) Long Range: fire ranged Special, safely charge energy, or close distance actively
             if (CanUseRangedSpecial() && Random.value < specialLongChance)
                 return State.Special;
+
+            if (self.IsGrounded && !self.IsSpecialReady && !IsIncomingAttackThreat(dist) && Random.value < chargeChance)
+                return State.Charge;
 
             return Random.value < 0.82f ? State.Approach : State.Jump;
         }
@@ -474,6 +487,29 @@ namespace EcclesiaFighters
                         if (self) self.AIMoveDir(0f);
                     }
                     break;
+
+                case State.Charge:
+                {
+                    float maxDur = difficulty == Difficulty.Dificil
+                        ? Random.Range(0.75f, 1.35f)
+                        : (difficulty == Difficulty.Medio ? Random.Range(0.85f, 1.50f) : Random.Range(0.65f, 1.10f));
+                    float t = 0f;
+                    self.AISetCharging(true);
+                    while (t < maxDur && self != null && !self.IsDead && self.InputEnabled && self.opponent != null)
+                    {
+                        if (self.IsSpecialReady || self.IsInHitstun || !self.IsGrounded) break;
+                        float d = Mathf.Abs(transform.position.x - self.opponent.position.x);
+                        if (d < midRange * 0.70f || IsIncomingAttackThreat(d))
+                        {
+                            defenseCheckCd = 0f;
+                            break;
+                        }
+                        t += Time.deltaTime;
+                        yield return null;
+                    }
+                    if (self != null) self.AISetCharging(false);
+                    break;
+                }
             }
         }
 

@@ -175,7 +175,6 @@ MonoBehaviour:
     hitstun: 0.28
   facingMode: 0
   specialDamage: 38
-  specialCooldown: 5
   specialStartup: 0.36
   specialActive: 0.12
   specialRecovery: 0.52
@@ -185,6 +184,13 @@ MonoBehaviour:
   chestHeightRatio: 0.7
   fallbackChestHeight: 1.3
   muzzleForwardOffset: 0.5
+  maxSpecialEnergy: 100
+  passiveEnergyPerSec: 3.5
+  chargeEnergyPerSec: 34
+  lightHitEnergyGain: 14
+  heavyHitEnergyGain: 20
+  takeHitEnergyGain: 12
+  blockHitEnergyGain: 7
   lightPunchStartup: 0.11
   heavyPunchStartup: 0.23
   kickStartup: 0.21

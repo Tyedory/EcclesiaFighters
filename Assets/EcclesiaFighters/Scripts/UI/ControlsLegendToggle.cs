@@ -54,8 +54,8 @@ namespace EcclesiaFighters
             if (!contentPanel) return;
 
             var rootRt = transform as RectTransform;
-            if (rootRt && rootRt.sizeDelta.x < 660f)
-                rootRt.sizeDelta = new Vector2(660f, Mathf.Max(rootRt.sizeDelta.y, 122f));
+            if (rootRt && rootRt.sizeDelta.x < 780f)
+                rootRt.sizeDelta = new Vector2(780f, Mathf.Max(rootRt.sizeDelta.y, 122f));
 
             var contentLe = contentPanel.GetComponent<LayoutElement>();
             if (contentLe && contentLe.preferredHeight < 80f)
@@ -138,7 +138,7 @@ namespace EcclesiaFighters
             string hp = FormatShortKey(KeybindManager.GetKey(playerIndex, FighterAction.HeavyPunch));
             string k  = FormatShortKey(KeybindManager.GetKey(playerIndex, FighterAction.Kick));
             string sp = FormatShortKey(KeybindManager.GetKey(playerIndex, FighterAction.Special));
-            return $"{l}/{r}/{j}/{c} Mov · {b} Def · {lp}/{hp}/{k}/{sp}";
+            return $"{l}/{r}/{j}/{c} Mov · {b} Def · {b}+{c} Carr · {lp}/{hp}/{k}/{sp}";
         }
 
         void Refresh()

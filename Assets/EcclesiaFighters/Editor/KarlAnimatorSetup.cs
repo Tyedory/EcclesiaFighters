@@ -133,10 +133,14 @@ namespace EcclesiaFighters.EditorTools
 
             // 4. Build KarlMarx.controller
             AnimationClip walkFwdClip = LoadPrimaryClip(AnimDir + "Walking.fbx");
-            AnimationClip runClip     = EnsureSharedRunningClip() ?? walkFwdClip;
+            AnimationClip runClip     = EnsureSharedRunningClip();
+            if (runClip == null) runClip = walkFwdClip;
+            AnimationClip specialClip = LoadPrimaryClip(AnimDir + "Casting Spell.fbx");
+            AnimationClip chargeClip  = SantoAnimatorSetup.EnsureSharedChargeLoopClip();
+            if (chargeClip == null) chargeClip = specialClip;
 
             AnimatorController controller = BuildAnimatorController(
-                idleClip, crouchIdleClip, blockClip, hitClip,
+                idleClip, crouchIdleClip, blockClip, chargeClip, hitClip,
                 walkFwdClip,
                 LoadPrimaryClip(AnimDir + "Walking Backwards.fbx"),
                 runClip,
@@ -148,7 +152,7 @@ namespace EcclesiaFighters.EditorTools
                 lightPunchClip,
                 LoadPrimaryClip(AnimDir + "Cross Punch.fbx"),
                 LoadPrimaryClip(AnimDir + "Kicking.fbx"),
-                LoadPrimaryClip(AnimDir + "Casting Spell.fbx"),
+                specialClip,
                 dyingClip);
 
             // 5. Wire Karl Marx Final.prefab (preserving material, collider, FighterController, FighterAI)
@@ -489,6 +493,7 @@ namespace EcclesiaFighters.EditorTools
             AnimationClip idleClip,
             AnimationClip crouchIdleClip,
             AnimationClip blockClip,
+            AnimationClip chargeClip,
             AnimationClip hitClip,
             AnimationClip walkFwdClip,
             AnimationClip walkBackClip,
@@ -516,6 +521,7 @@ namespace EcclesiaFighters.EditorTools
             controller.AddParameter("RunningBack", AnimatorControllerParameterType.Bool);
             controller.AddParameter("Crouching",   AnimatorControllerParameterType.Bool);
             controller.AddParameter("Blocking",    AnimatorControllerParameterType.Bool);
+            controller.AddParameter("Charging",    AnimatorControllerParameterType.Bool);
             controller.AddParameter(new AnimatorControllerParameter
             {
                 name        = "IsGrounded",
@@ -541,6 +547,7 @@ namespace EcclesiaFighters.EditorTools
             AnimatorState stRunFwd        = AddState(sm, "RunForward",        runClip,           1.00f, new Vector3(520, -165));
             AnimatorState stRunBack       = AddState(sm, "RunBackward",       runClip,          -1.00f, new Vector3(520, 125));
             AnimatorState stBlocking      = AddState(sm, "Blocking",          blockClip,         0.00f, new Vector3(260, -140));
+            AnimatorState stCharging      = AddState(sm, "Charging",          chargeClip,        0.65f, new Vector3(260, -240));
 
             AnimatorState stStandToCrouch = AddState(sm, "StandingToCrouch",  standToCrouchClip, 1.60f, new Vector3(260, 140));
             AnimatorState stCrouchIdle    = AddState(sm, "CrouchIdle",        crouchIdleClip,    1.00f, new Vector3(260, 240));
@@ -559,18 +566,18 @@ namespace EcclesiaFighters.EditorTools
             sm.defaultState = stIdle;
 
             // ── Standing locomotion transitions (walk & double-tap run) ──
-            AddBoolTransition(stIdle, stWalkFwd,  0.08f, ("Walking", true), ("Running", false), ("Crouching", false), ("Blocking", false));
-            AddBoolTransition(stIdle, stWalkBack, 0.08f, ("WalkingBack", true), ("RunningBack", false), ("Crouching", false), ("Blocking", false));
-            AddBoolTransition(stIdle, stRunFwd,   0.06f, ("Running", true), ("Crouching", false), ("Blocking", false));
-            AddBoolTransition(stIdle, stRunBack,  0.06f, ("RunningBack", true), ("Crouching", false), ("Blocking", false));
+            AddBoolTransition(stIdle, stWalkFwd,  0.08f, ("Walking", true), ("Running", false), ("Crouching", false), ("Blocking", false), ("Charging", false));
+            AddBoolTransition(stIdle, stWalkBack, 0.08f, ("WalkingBack", true), ("RunningBack", false), ("Crouching", false), ("Blocking", false), ("Charging", false));
+            AddBoolTransition(stIdle, stRunFwd,   0.06f, ("Running", true), ("Crouching", false), ("Blocking", false), ("Charging", false));
+            AddBoolTransition(stIdle, stRunBack,  0.06f, ("RunningBack", true), ("Crouching", false), ("Blocking", false), ("Charging", false));
 
-            AddBoolTransition(stWalkFwd, stRunFwd,   0.06f, ("Running", true));
-            AddBoolTransition(stWalkFwd, stRunBack,  0.06f, ("RunningBack", true));
+            AddBoolTransition(stWalkFwd, stRunFwd,   0.06f, ("Running", true), ("Charging", false));
+            AddBoolTransition(stWalkFwd, stRunBack,  0.06f, ("RunningBack", true), ("Charging", false));
             AddBoolTransition(stWalkFwd, stIdle,     0.08f, ("Walking", false), ("WalkingBack", false), ("Running", false), ("RunningBack", false));
             AddBoolTransition(stWalkFwd, stWalkBack, 0.08f, ("WalkingBack", true));
 
-            AddBoolTransition(stWalkBack, stRunBack, 0.06f, ("RunningBack", true));
-            AddBoolTransition(stWalkBack, stRunFwd,  0.06f, ("Running", true));
+            AddBoolTransition(stWalkBack, stRunBack, 0.06f, ("RunningBack", true), ("Charging", false));
+            AddBoolTransition(stWalkBack, stRunFwd,  0.06f, ("Running", true), ("Charging", false));
             AddBoolTransition(stWalkBack, stIdle,    0.08f, ("Walking", false), ("WalkingBack", false), ("Running", false), ("RunningBack", false));
             AddBoolTransition(stWalkBack, stWalkFwd, 0.08f, ("Walking", true));
 
@@ -584,26 +591,43 @@ namespace EcclesiaFighters.EditorTools
             AddBoolTransition(stRunBack, stRunFwd,   0.06f, ("Running", true));
             AddBoolTransition(stRunBack, stIdle,     0.08f, ("Running", false), ("RunningBack", false), ("Walking", false), ("WalkingBack", false));
 
+            // ── Charging transitions (priority over Blocking & Crouching) ──
+            AnimatorState[] chargeSources =
+            {
+                stIdle, stWalkFwd, stWalkBack, stRunFwd, stRunBack, stBlocking,
+                stStandToCrouch, stCrouchIdle, stCrouchWalkFwd, stCrouchWalkBack, stCrouchToStand
+            };
+            foreach (AnimatorState st in chargeSources)
+                AddBoolTransition(st, stCharging, 0.08f, ("Charging", true));
+
+            AddBoolTransition(stCharging, stBlocking,      0.07f, ("Charging", false), ("Blocking", true));
+            AddBoolTransition(stCharging, stStandToCrouch, 0.07f, ("Charging", false), ("Blocking", false), ("Crouching", true));
+            AddBoolTransition(stCharging, stRunFwd,        0.07f, ("Charging", false), ("Blocking", false), ("Crouching", false), ("Running", true));
+            AddBoolTransition(stCharging, stRunBack,       0.07f, ("Charging", false), ("Blocking", false), ("Crouching", false), ("RunningBack", true));
+            AddBoolTransition(stCharging, stWalkFwd,       0.07f, ("Charging", false), ("Blocking", false), ("Crouching", false), ("Walking", true));
+            AddBoolTransition(stCharging, stWalkBack,      0.07f, ("Charging", false), ("Blocking", false), ("Crouching", false), ("WalkingBack", true));
+            AddBoolTransition(stCharging, stIdle,          0.07f, ("Charging", false), ("Blocking", false), ("Crouching", false), ("Walking", false), ("WalkingBack", false), ("Running", false), ("RunningBack", false));
+
             // ── Blocking transitions ─────────────────────────────────
             AnimatorState[] guardableStates = { stIdle, stWalkFwd, stWalkBack, stRunFwd, stRunBack, stCrouchIdle, stCrouchWalkFwd, stCrouchWalkBack };
             foreach (AnimatorState st in guardableStates)
-                AddBoolTransition(st, stBlocking, 0.06f, ("Blocking", true));
+                AddBoolTransition(st, stBlocking, 0.06f, ("Blocking", true), ("Charging", false));
 
-            AddBoolTransition(stBlocking, stRunFwd,     0.07f, ("Blocking", false), ("Crouching", false), ("Running", true));
-            AddBoolTransition(stBlocking, stRunBack,    0.07f, ("Blocking", false), ("Crouching", false), ("RunningBack", true));
-            AddBoolTransition(stBlocking, stWalkFwd,    0.07f, ("Blocking", false), ("Crouching", false), ("Walking", true));
-            AddBoolTransition(stBlocking, stWalkBack,   0.07f, ("Blocking", false), ("Crouching", false), ("WalkingBack", true));
-            AddBoolTransition(stBlocking, stCrouchIdle, 0.07f, ("Blocking", false), ("Crouching", true));
-            AddBoolTransition(stBlocking, stIdle,       0.07f, ("Blocking", false), ("Crouching", false));
+            AddBoolTransition(stBlocking, stRunFwd,     0.07f, ("Blocking", false), ("Charging", false), ("Crouching", false), ("Running", true));
+            AddBoolTransition(stBlocking, stRunBack,    0.07f, ("Blocking", false), ("Charging", false), ("Crouching", false), ("RunningBack", true));
+            AddBoolTransition(stBlocking, stWalkFwd,    0.07f, ("Blocking", false), ("Charging", false), ("Crouching", false), ("Walking", true));
+            AddBoolTransition(stBlocking, stWalkBack,   0.07f, ("Blocking", false), ("Charging", false), ("Crouching", false), ("WalkingBack", true));
+            AddBoolTransition(stBlocking, stCrouchIdle, 0.07f, ("Blocking", false), ("Charging", false), ("Crouching", true));
+            AddBoolTransition(stBlocking, stIdle,       0.07f, ("Blocking", false), ("Charging", false), ("Crouching", false));
 
             // ── Crouch transitions ───────────────────────────────────
-            AddBoolTransition(stIdle,     stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false));
-            AddBoolTransition(stWalkFwd,  stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false));
-            AddBoolTransition(stWalkBack, stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false));
-            AddBoolTransition(stRunFwd,   stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false));
-            AddBoolTransition(stRunBack,  stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false));
+            AddBoolTransition(stIdle,     stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false), ("Charging", false));
+            AddBoolTransition(stWalkFwd,  stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false), ("Charging", false));
+            AddBoolTransition(stWalkBack, stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false), ("Charging", false));
+            AddBoolTransition(stRunFwd,   stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false), ("Charging", false));
+            AddBoolTransition(stRunBack,  stStandToCrouch, 0.08f, ("Crouching", true), ("Blocking", false), ("Charging", false));
 
-            AddBoolTransition(stStandToCrouch, stCrouchToStand, 0.08f, ("Crouching", false));
+            AddBoolTransition(stStandToCrouch, stCrouchToStand, 0.08f, ("Crouching", false), ("Charging", false));
             AddBoolTransition(stStandToCrouch, stCrouchWalkFwd, 0.08f, ("Crouching", true), ("Walking", true));
             AddBoolTransition(stStandToCrouch, stCrouchWalkBack,0.08f, ("Crouching", true), ("WalkingBack", true));
             AddExitTransition(stStandToCrouch, stCrouchIdle, 0.88f, 0.08f);
@@ -621,7 +645,7 @@ namespace EcclesiaFighters.EditorTools
             AddBoolTransition(stCrouchWalkFwd,  stCrouchToStand, 0.08f, ("Crouching", false));
             AddBoolTransition(stCrouchWalkBack, stCrouchToStand, 0.08f, ("Crouching", false));
 
-            AddBoolTransition(stCrouchToStand, stStandToCrouch, 0.08f, ("Crouching", true));
+            AddBoolTransition(stCrouchToStand, stStandToCrouch, 0.08f, ("Crouching", true), ("Charging", false));
             AddBoolTransition(stCrouchToStand, stRunFwd,        0.08f, ("Crouching", false), ("Running", true));
             AddBoolTransition(stCrouchToStand, stRunBack,       0.08f, ("Crouching", false), ("RunningBack", true));
             AddBoolTransition(stCrouchToStand, stWalkFwd,       0.08f, ("Crouching", false), ("Walking", true));
@@ -639,21 +663,23 @@ namespace EcclesiaFighters.EditorTools
             AddAnyTrigger(sm, stSpecial,    "Special",    0.06f, canTransitionToSelf: true);
 
             // Jump holds airborne pose while IsGrounded == false, returning cleanly on landing
-            AddBoolTransition(stJump, stBlocking,   0.08f, ("IsGrounded", true), ("Blocking", true));
-            AddBoolTransition(stJump, stCrouchIdle, 0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", true));
-            AddBoolTransition(stJump, stRunFwd,     0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("Running", true));
-            AddBoolTransition(stJump, stRunBack,    0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("RunningBack", true));
-            AddBoolTransition(stJump, stWalkFwd,    0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("Walking", true));
-            AddBoolTransition(stJump, stWalkBack,   0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("WalkingBack", true));
-            AddBoolTransition(stJump, stIdle,       0.08f, ("IsGrounded", true), ("Blocking", false), ("Crouching", false), ("Walking", false), ("WalkingBack", false), ("Running", false), ("RunningBack", false));
+            AddBoolTransition(stJump, stCharging,   0.08f, ("IsGrounded", true), ("Charging", true));
+            AddBoolTransition(stJump, stBlocking,   0.08f, ("IsGrounded", true), ("Charging", false), ("Blocking", true));
+            AddBoolTransition(stJump, stCrouchIdle, 0.08f, ("IsGrounded", true), ("Charging", false), ("Blocking", false), ("Crouching", true));
+            AddBoolTransition(stJump, stRunFwd,     0.08f, ("IsGrounded", true), ("Charging", false), ("Blocking", false), ("Crouching", false), ("Running", true));
+            AddBoolTransition(stJump, stRunBack,    0.08f, ("IsGrounded", true), ("Charging", false), ("Blocking", false), ("Crouching", false), ("RunningBack", true));
+            AddBoolTransition(stJump, stWalkFwd,    0.08f, ("IsGrounded", true), ("Charging", false), ("Blocking", false), ("Crouching", false), ("Walking", true));
+            AddBoolTransition(stJump, stWalkBack,   0.08f, ("IsGrounded", true), ("Charging", false), ("Blocking", false), ("Crouching", false), ("WalkingBack", true));
+            AddBoolTransition(stJump, stIdle,       0.08f, ("IsGrounded", true), ("Charging", false), ("Blocking", false), ("Crouching", false), ("Walking", false), ("WalkingBack", false), ("Running", false), ("RunningBack", false));
 
             // One-shot attack/hit return transitions (no exit transition on Death so he stays on final frame)
             AnimatorState[] actionStates = { stLightPunch, stHeavyPunch, stKick, stSpecial, stHit };
             foreach (AnimatorState st in actionStates)
             {
-                AddExitTransition(st, stBlocking,   0.88f, 0.08f, ("Blocking", true));
-                AddExitTransition(st, stCrouchIdle, 0.88f, 0.08f, ("Blocking", false), ("Crouching", true));
-                AddExitTransition(st, stIdle,       0.88f, 0.08f, ("Blocking", false), ("Crouching", false));
+                AddExitTransition(st, stCharging,   0.88f, 0.08f, ("Charging", true));
+                AddExitTransition(st, stBlocking,   0.88f, 0.08f, ("Charging", false), ("Blocking", true));
+                AddExitTransition(st, stCrouchIdle, 0.88f, 0.08f, ("Charging", false), ("Blocking", false), ("Crouching", true));
+                AddExitTransition(st, stIdle,       0.88f, 0.08f, ("Charging", false), ("Blocking", false), ("Crouching", false));
             }
 
             EditorUtility.SetDirty(controller);

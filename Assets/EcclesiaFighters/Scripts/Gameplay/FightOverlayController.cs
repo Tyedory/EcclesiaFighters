@@ -307,8 +307,8 @@ namespace EcclesiaFighters
             Stretch(preFightRoot.GetComponent<RectTransform>());
 
             Vector2 cardSize = is2P
-                ? new Vector2(1080f, 756f)
-                : (isAiVsAi ? new Vector2(680f, 440f) : new Vector2(680f, 756f));
+                ? new Vector2(1080f, 796f)
+                : (isAiVsAi ? new Vector2(680f, 440f) : new Vector2(680f, 796f));
 
             GameObject card = CreateFramedBox("PreFightCard", preFightRoot.transform, ColObsidian, ColAntiqueGold, 2f);
             var cardRt = card.GetComponent<RectTransform>();
@@ -399,7 +399,7 @@ namespace EcclesiaFighters
                 cols.transform.SetParent(card.transform, false);
                 var colsLe = cols.AddComponent<LayoutElement>();
                 colsLe.flexibleHeight = 1f;
-                colsLe.minHeight      = 430f;
+                colsLe.minHeight      = 472f;
 
                 var hlg = cols.AddComponent<HorizontalLayoutGroup>();
                 hlg.spacing                = 24f;
@@ -420,7 +420,7 @@ namespace EcclesiaFighters
                 GameObject col = BuildPlayerControlsColumn(card.transform, humanIdx, pLabel, colHdr, 220f, 17);
                 var colLe = col.GetComponent<LayoutElement>() ?? col.AddComponent<LayoutElement>();
                 colLe.flexibleHeight = 1f;
-                colLe.minHeight      = 430f;
+                colLe.minHeight      = 472f;
             }
 
             if (!isAiVsAi)
@@ -477,18 +477,21 @@ namespace EcclesiaFighters
 
             CreateDivider(panel.transform);
 
-            string leftKey  = KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.MoveLeft));
-            string rightKey = KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.MoveRight));
+            string leftKey   = KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.MoveLeft));
+            string rightKey  = KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.MoveRight));
+            string crouchKey = KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Crouch));
+            string blockKey  = KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Block));
 
             CreateKeyRow(panel.transform, "Mover",             $"{leftKey} / {rightKey}",    badgeWidth, badgeMaxFont);
             CreateKeyRow(panel.transform, "Correr (2x Esq/Dir)", $"2x {leftKey} / {rightKey}", badgeWidth, badgeMaxFont);
             CreateKeyRow(panel.transform, "Pular",             KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Jump)),       badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Agachar",    KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Crouch)),     badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Defender",   KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Block)),      badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Soco Leve",  KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.LightPunch)), badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Soco Forte", KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.HeavyPunch)), badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Chute",      KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Kick)),       badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Especial",   KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Special)),    badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, "Agachar",           crouchKey, badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, "Defender",          blockKey,  badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, "Soco Leve",         KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.LightPunch)), badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, "Soco Forte",        KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.HeavyPunch)), badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, "Chute",             KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Kick)),       badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, "Especial",          KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Special)),    badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, "Carregar Especial", $"{blockKey} + {crouchKey}", badgeWidth, badgeMaxFont);
 
             return panel;
         }

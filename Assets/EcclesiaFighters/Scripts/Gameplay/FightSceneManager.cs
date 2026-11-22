@@ -35,6 +35,9 @@ namespace EcclesiaFighters
         // ── HUD ────────────────────────────────────────────────
         [Header("HUD")]
         public Slider   hpBarA, hpBarB;
+        public Slider   spBarA, spBarB;
+        public Image    spFillA, spFillB;
+        public Text     spReadyTextA, spReadyTextB;
         public Text     nameTagA, nameTagB;
         public Text     timerText;
         public Text     winsA_icons, winsB_icons;   // "● ●" style
@@ -127,6 +130,7 @@ namespace EcclesiaFighters
 
             fightOverlay = GetComponent<FightOverlayController>() ?? gameObject.AddComponent<FightOverlayController>();
             fightOverlay.Initialize(this);
+            EnsureSpecialBarsHUD();
             if (hud) hud.alpha = 0f;
             yield return fightOverlay.ShowPreFightSplashAndWait();
 
@@ -192,10 +196,240 @@ namespace EcclesiaFighters
 
         void Update()
         {
+            UpdateSpecialBarsHUD();
             if (!roundActive) return;
             if (!freezeTimer) timer -= Time.deltaTime;
             if (timerText) timerText.text = Mathf.CeilToInt(Mathf.Max(timer,0)).ToString();
             if (!freezeTimer && timer <= 0) EndRound(ctrlA && ctrlB ? ctrlA.CurrentHP >= ctrlB.CurrentHP : true);
+        }
+
+        void EnsureSpecialBarsHUD()
+        {
+            if (spBarA != null && spBarB != null)
+            {
+                if (spReadyTextA != null) spReadyTextA.gameObject.SetActive(false);
+                if (spReadyTextB != null) spReadyTextB.gameObject.SetActive(false);
+                spBarA.value = 0f;
+                spBarB.value = 0f;
+                return;
+            }
+
+            if (hpBarA != null && spBarA == null)
+                BuildRuntimeSpecialBar(hpBarA, nameTagA, isLeft: true, out spBarA, out spFillA, out spReadyTextA);
+
+            if (hpBarB != null && spBarB == null)
+                BuildRuntimeSpecialBar(hpBarB, nameTagB, isLeft: false, out spBarB, out spFillB, out spReadyTextB);
+        }
+
+        static void BuildRuntimeSpecialBar(Slider hpBar, Text referenceNameTag, bool isLeft,
+            out Slider spBar, out Image spFillImg, out Text spReadyText)
+        {
+            spBar       = null;
+            spFillImg   = null;
+            spReadyText = null;
+            if (hpBar == null || hpBar.transform.parent == null) return;
+
+            Transform clusterTf = hpBar.transform.parent;
+            if (clusterTf.parent != null && clusterTf.parent.name == "TopBar")
+            {
+                RectTransform topBarRt = clusterTf.parent as RectTransform;
+                if (topBarRt != null && topBarRt.anchorMin.y > 0.79f)
+                    topBarRt.anchorMin = new Vector2(topBarRt.anchorMin.x, 0.785f);
+            }
+
+            Transform existingSp = clusterTf.Find(isLeft ? "SPBarA" : "SPBarB");
+            if (existingSp != null)
+            {
+                spBar = existingSp.GetComponent<Slider>();
+                Transform fillTf = existingSp.Find("Fill Area/Fill");
+                if (fillTf != null) spFillImg = fillTf.GetComponent<Image>();
+                Transform readyTf = existingSp.Find("SPReadyText");
+                if (readyTf != null) spReadyText = readyTf.GetComponent<Text>();
+                if (spBar != null) return;
+            }
+
+            Transform namePlateTf = clusterTf.Find("NamePlate");
+            if (namePlateTf != null)
+            {
+                RectTransform npRt = namePlateTf as RectTransform;
+                if (npRt != null)
+                {
+                    npRt.anchorMin = new Vector2(0f, 0.62f);
+                    npRt.anchorMax = new Vector2(1f, 0.98f);
+                }
+            }
+
+            RectTransform hpRt = hpBar.transform as RectTransform;
+            if (hpRt != null)
+            {
+                hpRt.anchorMin = new Vector2(0f, 0.25f);
+                hpRt.anchorMax = new Vector2(1f, 0.58f);
+            }
+
+            Sprite panelSprite = null;
+            Sprite frameSprite = null;
+            Sprite sheenSprite = null;
+            Transform bgSrc = hpBar.transform.Find("Background");
+            if (bgSrc != null)
+            {
+                Image bgImg = bgSrc.GetComponent<Image>();
+                if (bgImg != null) panelSprite = bgImg.sprite;
+            }
+            Transform frameSrc = hpBar.transform.Find("MetallicFrame");
+            if (frameSrc != null)
+            {
+                Image frImg = frameSrc.GetComponent<Image>();
+                if (frImg != null) frameSprite = frImg.sprite;
+            }
+            Transform sheenSrc = hpBar.transform.Find("Fill Area/Fill/Sheen");
+            if (sheenSrc != null)
+            {
+                Image shImg = sheenSrc.GetComponent<Image>();
+                if (shImg != null) sheenSprite = shImg.sprite;
+            }
+
+            Font uiFont = referenceNameTag != null && referenceNameTag.font != null
+                ? referenceNameTag.font
+                : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+            var barGo = new GameObject(isLeft ? "SPBarA" : "SPBarB", typeof(RectTransform));
+            barGo.transform.SetParent(clusterTf, false);
+            var barRt = barGo.GetComponent<RectTransform>();
+            barRt.anchorMin = new Vector2(0f, 0.02f);
+            barRt.anchorMax = new Vector2(1f, 0.21f);
+            barRt.offsetMin = Vector2.zero;
+            barRt.offsetMax = Vector2.zero;
+
+            var troughGo = new GameObject("Background", typeof(RectTransform), typeof(Image));
+            troughGo.transform.SetParent(barRt, false);
+            StretchFullRect(troughGo.GetComponent<RectTransform>());
+            var troughImg = troughGo.GetComponent<Image>();
+            troughImg.sprite        = panelSprite;
+            troughImg.type          = panelSprite != null ? Image.Type.Sliced : Image.Type.Simple;
+            troughImg.color         = new Color(0.05f, 0.04f, 0.07f, 0.94f);
+            troughImg.raycastTarget = false;
+
+            var fillAreaGo = new GameObject("Fill Area", typeof(RectTransform));
+            fillAreaGo.transform.SetParent(barRt, false);
+            var faRt = fillAreaGo.GetComponent<RectTransform>();
+            faRt.anchorMin = Vector2.zero;
+            faRt.anchorMax = Vector2.one;
+            faRt.offsetMin = new Vector2(4f, 3f);
+            faRt.offsetMax = new Vector2(-4f, -3f);
+
+            var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fillGo.transform.SetParent(faRt, false);
+            StretchFullRect(fillGo.GetComponent<RectTransform>());
+            spFillImg               = fillGo.GetComponent<Image>();
+            spFillImg.sprite        = panelSprite;
+            spFillImg.type          = panelSprite != null ? Image.Type.Sliced : Image.Type.Simple;
+            spFillImg.color         = new Color(0.92f, 0.62f, 0.14f, 1f);
+            spFillImg.raycastTarget = false;
+
+            if (sheenSprite != null)
+            {
+                var sheenGo = new GameObject("Sheen", typeof(RectTransform), typeof(Image));
+                sheenGo.transform.SetParent(fillGo.transform, false);
+                StretchFullRect(sheenGo.GetComponent<RectTransform>());
+                var sheenImg = sheenGo.GetComponent<Image>();
+                sheenImg.sprite        = sheenSprite;
+                sheenImg.type          = Image.Type.Sliced;
+                sheenImg.color         = new Color(1f, 1f, 1f, 0.65f);
+                sheenImg.raycastTarget = false;
+            }
+
+            var frameGo = new GameObject("MetallicFrame", typeof(RectTransform), typeof(Image));
+            frameGo.transform.SetParent(barRt, false);
+            StretchFullRect(frameGo.GetComponent<RectTransform>());
+            var frameImg = frameGo.GetComponent<Image>();
+            frameImg.sprite        = frameSprite;
+            frameImg.type          = frameSprite != null ? Image.Type.Sliced : Image.Type.Simple;
+            frameImg.color         = frameSprite != null ? new Color(0.56f, 0.44f, 0.19f, 1f) : new Color(0.56f, 0.44f, 0.19f, 0.25f);
+            frameImg.raycastTarget = false;
+
+            var readyGo = new GameObject("SPReadyText", typeof(RectTransform), typeof(Text), typeof(Outline));
+            readyGo.transform.SetParent(barRt, false);
+            StretchFullRect(readyGo.GetComponent<RectTransform>());
+            spReadyText                      = readyGo.GetComponent<Text>();
+            spReadyText.font                 = uiFont;
+            spReadyText.text                 = "ESPECIAL PRONTO!";
+            spReadyText.fontSize             = 14;
+            spReadyText.fontStyle            = FontStyle.Bold;
+            spReadyText.color                = new Color(1f, 0.97f, 0.86f, 1f);
+            spReadyText.alignment            = TextAnchor.MiddleCenter;
+            spReadyText.resizeTextForBestFit = true;
+            spReadyText.resizeTextMinSize    = 9;
+            spReadyText.resizeTextMaxSize    = 15;
+            spReadyText.raycastTarget        = false;
+
+            var outline = readyGo.GetComponent<Outline>();
+            outline.effectColor    = new Color(0.06f, 0.03f, 0.02f, 0.96f);
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
+            readyGo.SetActive(false);
+
+            spBar              = barGo.AddComponent<Slider>();
+            spBar.interactable = false;
+            spBar.transition   = Selectable.Transition.None;
+            spBar.navigation   = new Navigation { mode = Navigation.Mode.None };
+            spBar.fillRect     = fillGo.GetComponent<RectTransform>();
+            spBar.handleRect   = null;
+            spBar.direction    = isLeft ? Slider.Direction.RightToLeft : Slider.Direction.LeftToRight;
+            spBar.minValue     = 0f;
+            spBar.maxValue     = 1f;
+            spBar.value        = 0f;
+        }
+
+        static void StretchFullRect(RectTransform rt)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+        }
+
+        void UpdateSpecialBarsHUD()
+        {
+            UpdateSingleSpecialBar(ctrlA, spBarA, spFillA, spReadyTextA);
+            UpdateSingleSpecialBar(ctrlB, spBarB, spFillB, spReadyTextB);
+        }
+
+        static void UpdateSingleSpecialBar(FighterController fighter, Slider bar, Image fillImg, Text readyTxt)
+        {
+            if (fighter == null || bar == null) return;
+
+            float target = fighter.SpecialNormalized;
+            if (target < bar.value && target < 0.02f)
+                bar.value = target;
+            else
+                bar.value = Mathf.MoveTowards(bar.value, target, Time.deltaTime * 5.0f);
+
+            bool ready = fighter.IsSpecialReady;
+            if (fillImg != null)
+            {
+                if (ready)
+                {
+                    float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 7.5f);
+                    fillImg.color = Color.Lerp(
+                        new Color(0.98f, 0.76f, 0.18f, 1f),
+                        new Color(1.00f, 0.95f, 0.48f, 1f),
+                        pulse);
+                }
+                else if (fighter.IsCharging)
+                {
+                    float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 13f);
+                    fillImg.color = Color.Lerp(
+                        new Color(0.90f, 0.55f, 0.12f, 1f),
+                        new Color(1.00f, 0.84f, 0.26f, 1f),
+                        pulse);
+                }
+                else
+                {
+                    fillImg.color = new Color(0.88f, 0.58f, 0.14f, 1f);
+                }
+            }
+
+            if (readyTxt != null && readyTxt.gameObject.activeSelf != ready)
+                readyTxt.gameObject.SetActive(ready);
         }
 
         IEnumerator RoundIntro()
@@ -269,6 +503,13 @@ namespace EcclesiaFighters
         {
             ctrlA?.FullHeal();
             ctrlB?.FullHeal();
+        }
+
+        public void DevFillSpecialBoth()
+        {
+            if (ctrlA != null) ctrlA.DevFillSpecial();
+            if (ctrlB != null) ctrlB.DevFillSpecial();
+            UpdateSpecialBarsHUD();
         }
 
         public void DevResetPositionsAndRevive()

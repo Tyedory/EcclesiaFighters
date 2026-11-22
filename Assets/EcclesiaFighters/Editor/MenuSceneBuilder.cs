@@ -1036,12 +1036,12 @@ namespace EcclesiaFighters.EditorTools
 
             // Top Arcade Bar
             RectTransform topBar = NewRect("TopBar", hudRt);
-            Region(topBar, 0.025f, 0.815f, 0.975f, 0.975f);
+            Region(topBar, 0.025f, 0.785f, 0.975f, 0.975f);
 
-            // P1 Health Cluster (Left → drains toward center timer)
+            // P1 Health & Special Cluster (Left → drains toward center timer)
             Slider hpA = BuildArcadeHealthBar(topBar, "P1Cluster", "SANTO AGOSTINHO", FaithBlue,
                 new Color(0.86f, 0.68f, 0.24f, 1f), 0f, 0.435f, true, Mathf.Max(1, mgr.roundsToWin),
-                out Text nameA, out Text winsA);
+                out Text nameA, out Text winsA, out Slider spBarA, out Image spFillA, out Text spReadyA);
 
             // Center Timer Badge
             Image timerBadge = AddFramedPanel(topBar, "TimerBadge", BurgundyPanel, BrightGold, false);
@@ -1053,10 +1053,10 @@ namespace EcclesiaFighters.EditorTools
             Region(timerTxt.rectTransform, 0.05f, 0.04f, 0.95f, 0.72f);
             AddStrongTextEffects(timerTxt, 2.5f, 3f);
 
-            // P2 Health Cluster (Right → drains toward center timer)
+            // P2 Health & Special Cluster (Right → drains toward center timer)
             Slider hpB = BuildArcadeHealthBar(topBar, "P2Cluster", "KARL MARX", IdeoCrimson,
                 Crimson, 0.565f, 1f, false, Mathf.Max(1, mgr.roundsToWin),
-                out Text nameB, out Text winsB);
+                out Text nameB, out Text winsB, out Slider spBarB, out Image spFillB, out Text spReadyB);
 
             // Bottom-left Toggleable Controls Legend
             BuildControlsLegend(hudRt);
@@ -1073,16 +1073,22 @@ namespace EcclesiaFighters.EditorTools
             Stretch(fade.rectTransform);
 
             // Rewire ONLY the HUD references on FightSceneManager
-            mgr.hpBarA      = hpA;
-            mgr.hpBarB      = hpB;
-            mgr.nameTagA    = nameA;
-            mgr.nameTagB    = nameB;
-            mgr.timerText   = timerTxt;
-            mgr.winsA_icons = winsA;
-            mgr.winsB_icons = winsB;
-            mgr.centerText  = centerTxt;
-            mgr.hud         = hudGroup;
-            mgr.fadeOverlay = fade;
+            mgr.hpBarA       = hpA;
+            mgr.hpBarB       = hpB;
+            mgr.spBarA       = spBarA;
+            mgr.spBarB       = spBarB;
+            mgr.spFillA      = spFillA;
+            mgr.spFillB      = spFillB;
+            mgr.spReadyTextA = spReadyA;
+            mgr.spReadyTextB = spReadyB;
+            mgr.nameTagA     = nameA;
+            mgr.nameTagB     = nameB;
+            mgr.timerText    = timerTxt;
+            mgr.winsA_icons  = winsA;
+            mgr.winsB_icons  = winsB;
+            mgr.centerText   = centerTxt;
+            mgr.hud          = hudGroup;
+            mgr.fadeOverlay  = fade;
 
             SetupFightArena3D(mgr);
             EditorUtility.SetDirty(mgr);
@@ -1146,14 +1152,15 @@ namespace EcclesiaFighters.EditorTools
 
         static Slider BuildArcadeHealthBar(RectTransform parent, string rootName, string defaultName,
             Color accent, Color fillColor, float x0, float x1, bool isLeft, int roundsToWin,
-            out Text nameTag, out Text winsIcons)
+            out Text nameTag, out Text winsIcons,
+            out Slider spSlider, out Image spFillImg, out Text spReadyTxt)
         {
             RectTransform cluster = NewRect(rootName, parent);
             Region(cluster, x0, 0f, x1, 1f);
 
             // Nameplate + Win Pips row
             Image namePlate = AddFramedPanel(cluster, "NamePlate", ObsidianPanel, MutedGold, false);
-            Region(namePlate.rectTransform, 0f, 0.55f, 1f, 0.96f);
+            Region(namePlate.rectTransform, 0f, 0.62f, 1f, 0.98f);
 
             string pipsDefault = new string('○', roundsToWin);
             if (isLeft)
@@ -1174,7 +1181,7 @@ namespace EcclesiaFighters.EditorTools
 
             // Metallic / Gold Framed Health Slider
             RectTransform barRt = NewRect(isLeft ? "HPBarA" : "HPBarB", cluster);
-            Region(barRt, 0f, 0.08f, 1f, 0.50f);
+            Region(barRt, 0f, 0.25f, 1f, 0.58f);
 
             Image trough = AddImage(barRt, "Background", SlotDark, sprPanel, false);
             trough.type = Image.Type.Sliced;
@@ -1205,13 +1212,54 @@ namespace EcclesiaFighters.EditorTools
             slider.handleRect = null;
             slider.direction = isLeft ? Slider.Direction.RightToLeft : Slider.Direction.LeftToRight;
             slider.minValue = 0f; slider.maxValue = 1f; slider.value = 1f;
+
+            // Sleek Special Energy Bar directly below HP bar
+            RectTransform spRt = NewRect(isLeft ? "SPBarA" : "SPBarB", cluster);
+            Region(spRt, 0f, 0.02f, 1f, 0.21f);
+
+            Image spTrough = AddImage(spRt, "Background", SlotDark, sprPanel, false);
+            spTrough.type = Image.Type.Sliced;
+            Stretch(spTrough.rectTransform);
+
+            RectTransform spFillArea = NewRect("Fill Area", spRt);
+            spFillArea.anchorMin = Vector2.zero; spFillArea.anchorMax = Vector2.one;
+            spFillArea.offsetMin = new Vector2(4f, 3f); spFillArea.offsetMax = new Vector2(-4f, -3f);
+
+            spFillImg = AddImage(spFillArea, "Fill", new Color(0.88f, 0.58f, 0.14f, 1f), sprPanel, false);
+            spFillImg.type = Image.Type.Sliced;
+            spFillImg.rectTransform.anchorMin = Vector2.zero; spFillImg.rectTransform.anchorMax = Vector2.one;
+            spFillImg.rectTransform.offsetMin = Vector2.zero; spFillImg.rectTransform.offsetMax = Vector2.zero;
+
+            Image spSheen = AddImage(spFillImg.rectTransform, "Sheen", new Color(1f, 1f, 1f, 0.65f), sprSheen, false);
+            spSheen.type = Image.Type.Sliced;
+            Stretch(spSheen.rectTransform);
+
+            Image spFrame = AddImage(spRt, "MetallicFrame", MutedGold, sprFrameOrnate, false);
+            spFrame.type = Image.Type.Sliced;
+            Stretch(spFrame.rectTransform);
+
+            spReadyTxt = AddText(spRt, "SPReadyText", "ESPECIAL PRONTO!", 14, Ivory, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Stretch(spReadyTxt.rectTransform);
+            spReadyTxt.resizeTextForBestFit = true; spReadyTxt.resizeTextMinSize = 9; spReadyTxt.resizeTextMaxSize = 15;
+            AddStrongTextEffects(spReadyTxt, 1.5f, 2f);
+            spReadyTxt.gameObject.SetActive(false);
+
+            spSlider = spRt.gameObject.AddComponent<Slider>();
+            spSlider.interactable = false;
+            spSlider.transition = Selectable.Transition.None;
+            spSlider.navigation = new Navigation { mode = Navigation.Mode.None };
+            spSlider.fillRect = spFillImg.rectTransform;
+            spSlider.handleRect = null;
+            spSlider.direction = isLeft ? Slider.Direction.RightToLeft : Slider.Direction.LeftToRight;
+            spSlider.minValue = 0f; spSlider.maxValue = 1f; spSlider.value = 0f;
+
             return slider;
         }
 
         static void BuildControlsLegend(RectTransform hudRt)
         {
             RectTransform legendRt = NewRect("ControlsLegend", hudRt);
-            Place(legendRt, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(28f, 22f), new Vector2(660f, 122f));
+            Place(legendRt, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(28f, 22f), new Vector2(780f, 122f));
 
             var vlg = legendRt.gameObject.AddComponent<VerticalLayoutGroup>();
             vlg.spacing = 4f;
@@ -1258,7 +1306,7 @@ namespace EcclesiaFighters.EditorTools
             SetLayoutElement(line1.gameObject, preferredHeight: 26f).minHeight = 24f;
 
             Text line2 = AddText(body.rectTransform, "AttackControls",
-                "F Soco Leve · G Soco Forte · H Chute · T Especial",
+                "F Soco Leve · G Soco Forte · H Chute · T Especial · SHIFT ESQ+S Carregar",
                 15, BrightGold, TextAnchor.MiddleLeft, FontStyle.Bold);
             line2.resizeTextForBestFit = true;
             line2.resizeTextMinSize    = 10;

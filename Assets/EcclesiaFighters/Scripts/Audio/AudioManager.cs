@@ -409,6 +409,20 @@ namespace EcclesiaFighters
         public static void PlayJump()          { var am = Instance; AudioLibrary l = am != null ? am.GetLib() : null; if (am != null && l != null) am.PlaySFXInternal(l.sfxJump); }
         public static void PlayLand()          { var am = Instance; AudioLibrary l = am != null ? am.GetLib() : null; if (am != null && l != null) am.PlaySFXInternal(l.sfxLand); }
 
+        public static void PlaySpecialReadyCue()
+        {
+            var am = Instance;
+            if (am == null) return;
+            AudioLibrary l = am.GetLib();
+            if (l == null) return;
+            AudioCue cue = l.sfxMenuConfirm.IsValid ? l.sfxMenuConfirm : l.sfxMenuClick;
+            if (!cue.IsValid) return;
+            am.EnsureChannels();
+            am.RecalculateSourceVolumes();
+            if (am.sfxSource != null)
+                am.sfxSource.PlayOneShot(cue.clip, cue.EffectiveScale * 0.35f);
+        }
+
         // ── Match Flow & Announcer Voices ─────────────────────
         public static void PlayRoundIntroVoice(int roundNumber, bool isFinalRound)
         {

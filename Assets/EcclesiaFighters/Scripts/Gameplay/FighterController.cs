@@ -125,7 +125,6 @@ namespace EcclesiaFighters
         // ── Special projectile ────────────────────────────────
         [Header("Special")]
         public float specialDamage = 28f;
-        public float specialCooldown = 5f;
         public float specialStartup = 0.16f;
         public float specialActive = 0.10f;
         public float specialRecovery = 0.24f;
@@ -136,6 +135,15 @@ namespace EcclesiaFighters
         [Range(0f, 1f)] public float chestHeightRatio = 0.7f;
         public float fallbackChestHeight = 1.3f;
         public float muzzleForwardOffset = 0.55f;
+
+        [Header("Special Energy & Charging")]
+        public float maxSpecialEnergy = 100f;
+        public float passiveEnergyPerSec = 3.5f;
+        public float chargeEnergyPerSec = 34f;
+        public float lightHitEnergyGain = 14f;
+        public float heavyHitEnergyGain = 20f;
+        public float takeHitEnergyGain = 12f;
+        public float blockHitEnergyGain = 7f;
 
         [Header("Animated Impact Timings (Used when AnimatorController is assigned)")]
         [Tooltip("Seconds from Light Punch input until hitbox activates when animated.")]
@@ -186,7 +194,12 @@ namespace EcclesiaFighters
         public bool IsInHitstun => hitstunTimer > 0f;
         public bool InputEnabled => inputEnabled;
         public AttackType CurrentAttack => currentAttack;
-        public bool SpecialReady => spCooldown <= 0f;
+        public float CurrentSpecialEnergy => currentSpecialEnergy;
+        public float SpecialNormalized => maxSpecialEnergy > 0f ? Mathf.Clamp01(currentSpecialEnergy / maxSpecialEnergy) : 0f;
+        public bool IsSpecialReady => currentSpecialEnergy >= maxSpecialEnergy - 0.01f;
+        public bool SpecialReady => IsSpecialReady;
+        public bool IsCharging => charging;
+        public bool IsInvulnerable => invulnTimer > 0f;
         public bool IsDead => dead;
         public bool IsSprinting => sprinting;
         public bool DevCrouchActive => devForceCrouch;
@@ -209,6 +222,7 @@ namespace EcclesiaFighters
         static readonly int HashRunningBack = Animator.StringToHash("RunningBack");
         static readonly int HashCrouching = Animator.StringToHash("Crouching");
         static readonly int HashBlocking = Animator.StringToHash("Blocking");
+        static readonly int HashCharging = Animator.StringToHash("Charging");
         static readonly int HashIsGrounded = Animator.StringToHash("IsGrounded");
         static readonly int HashJump = Animator.StringToHash("Jump");
         static readonly int HashLightPunch = Animator.StringToHash("LightPunch");
@@ -224,21 +238,35 @@ namespace EcclesiaFighters
 
         static Material sharedHitIndicatorMat;
         static Material sharedFallbackProjMat;
+        static Texture2D sharedSoftGlowTex;
+        static Texture2D sharedRingGlowTex;
 
         // ── Runtime state ─────────────────────────────────────
-        float hp, baseMaxHP, spCooldown, attackCooldownTimer;
+        float hp, baseMaxHP, currentSpecialEnergy, specialReadyFlashTimer, attackCooldownTimer;
         float hitstunTimer, invulnTimer, hitFlashTimer, blockFlashTimer;
         float jumpGraceTimer, lastGroundContactTime = -10f;
         float stageZ;
 
-        bool grounded = true, blocking, crouching, dead, inputEnabled;
+        bool grounded = true, blocking, crouching, charging, dead, inputEnabled;
         bool hasBeenAirborne;
         float lastSpawnOrResetTime, lastLandSfxTime = -10f;
         bool walkingForward, walkingBackward;
         bool sprinting, isSprintJump, runningForward, runningBackward;
         int sprintInputDir, lastTappedDir;
         float lastLeftTapTime = -10f, lastRightTapTime = -10f;
-        bool holdingAway, aiWantsBlock, aiWantsCrouch;
+        bool holdingAway, aiWantsBlock, aiWantsCrouch, aiWantsCharge;
+
+        // ── Charging Aura VFX ─────────────────────────────────
+        GameObject chargeAuraRoot;
+        ParticleSystem chargeParticles;
+        Transform chargeGroundRing;
+        Material chargeParticleMat;
+        Material chargeRingMat;
+        Light chargePointLight;
+        Color chargePrimaryColor;
+        Color chargeCoreColor;
+        float chargeAuraIntensity;
+        float chargeRingAngle;
         bool devForceCrouch, devForceBlock, devWalkJustEnded;
         float devWalkTimer;
         int devWalkRelDir;
@@ -336,7 +364,8 @@ namespace EcclesiaFighters
             StopActiveAttack();
 
             hp = maxHP;
-            spCooldown = 0f;
+            currentSpecialEnergy = 0f;
+            specialReadyFlashTimer = 0f;
             attackCooldownTimer = 0f;
             hitstunTimer = 0f;
             invulnTimer = 0f;
@@ -350,6 +379,7 @@ namespace EcclesiaFighters
             holdingAway = false;
             aiWantsBlock = false;
             aiWantsCrouch = false;
+            aiWantsCharge = false;
             devForceCrouch = false;
             devForceBlock = false;
             devWalkJustEnded = false;
@@ -359,11 +389,13 @@ namespace EcclesiaFighters
 
             isSprintJump = false;
             StopSprint();
+            SetCharging(false);
             SetWalking(false, false);
             SetCrouching(false);
             SetBlocking(false);
             RestoreCollider();
             ResetVisualPose();
+            UpdateChargeAuraVFX(0f);
 
             if (hpBar != null)
             {
@@ -396,12 +428,14 @@ namespace EcclesiaFighters
                 holdingAway = false;
                 aiWantsBlock = false;
                 aiWantsCrouch = false;
+                aiWantsCharge = false;
                 devForceCrouch = false;
                 devForceBlock = false;
                 devWalkJustEnded = false;
                 devWalkTimer = 0f;
                 isSprintJump = false;
                 StopSprint();
+                SetCharging(false);
                 SetWalking(false, false);
                 SetCrouching(false);
                 SetBlocking(false);
@@ -419,7 +453,9 @@ namespace EcclesiaFighters
             isPlayerControlled = playerControlled;
             aiWantsBlock = false;
             aiWantsCrouch = false;
+            aiWantsCharge = false;
             holdingAway = false;
+            SetCharging(false);
             SetWalking(false, false);
             SetCrouching(false);
             SetBlocking(false);
@@ -484,6 +520,7 @@ namespace EcclesiaFighters
         public void AIMoveDir(float dir)
         {
             if (isPlayerControlled) return;
+            if (charging) { aiWantsCharge = false; SetCharging(false); }
             if (!CanAct()) { SetWalking(false, false); return; }
             if (Mathf.Abs(dir) < 0.01f || blocking)
                 SetWalking(false, false);
@@ -494,19 +531,21 @@ namespace EcclesiaFighters
         public void AIJump()
         {
             if (isPlayerControlled) return;
+            if (charging) { aiWantsCharge = false; SetCharging(false); }
             if (CanAct() && grounded && !crouching && !blocking) DoJump();
         }
 
-        public void AILightPunch() { if (!isPlayerControlled) TryStartMelee(AttackType.LightPunch); }
-        public void AIHeavyPunch() { if (!isPlayerControlled) TryStartMelee(AttackType.HeavyPunch); }
-        public void AIPunch() { if (!isPlayerControlled) TryStartMelee(AttackType.LightPunch); }
-        public void AIKick() { if (!isPlayerControlled) TryStartMelee(AttackType.Kick); }
-        public void AISpecial() { if (!isPlayerControlled) TryStartSpecial(); }
+        public void AILightPunch() { if (!isPlayerControlled) { aiWantsCharge = false; SetCharging(false); TryStartMelee(AttackType.LightPunch); } }
+        public void AIHeavyPunch() { if (!isPlayerControlled) { aiWantsCharge = false; SetCharging(false); TryStartMelee(AttackType.HeavyPunch); } }
+        public void AIPunch() { if (!isPlayerControlled) { aiWantsCharge = false; SetCharging(false); TryStartMelee(AttackType.LightPunch); } }
+        public void AIKick() { if (!isPlayerControlled) { aiWantsCharge = false; SetCharging(false); TryStartMelee(AttackType.Kick); } }
+        public void AISpecial() { if (!isPlayerControlled) { aiWantsCharge = false; SetCharging(false); TryStartSpecial(); } }
 
         public void AISetBlock(bool v)
         {
             if (isPlayerControlled) return;
             aiWantsBlock = v;
+            if (v) { aiWantsCharge = false; SetCharging(false); }
             if (dead || !inputEnabled) { SetBlocking(false); return; }
             if (v && !isAttacking && hitstunTimer <= 0f && grounded)
             {
@@ -523,8 +562,32 @@ namespace EcclesiaFighters
         {
             if (isPlayerControlled) return;
             aiWantsCrouch = v;
+            if (v) { aiWantsCharge = false; SetCharging(false); }
             if (dead || !inputEnabled) { SetCrouching(false); return; }
             SetCrouching(v && grounded && !isAttacking && hitstunTimer <= 0f);
+        }
+
+        public void AISetCharging(bool val)
+        {
+            if (isPlayerControlled) return;
+            aiWantsCharge = val;
+            if (!val || dead || !inputEnabled)
+            {
+                SetCharging(false);
+                return;
+            }
+            if (grounded && !isAttacking && hitstunTimer <= 0f && !IsSpecialReady)
+            {
+                StopSprint();
+                SetWalking(false, false);
+                SetBlocking(false);
+                SetCrouching(false);
+                SetCharging(true);
+            }
+            else
+            {
+                SetCharging(false);
+            }
         }
 
         // ══════════════════════════════════════════════════════
@@ -535,7 +598,7 @@ namespace EcclesiaFighters
             if (Time.timeScale <= 0f || FightOverlayController.IsPaused) return;
 
             float dt = Time.deltaTime;
-            if (spCooldown > 0f) spCooldown -= dt;
+            if (specialReadyFlashTimer > 0f) specialReadyFlashTimer = Mathf.Max(0f, specialReadyFlashTimer - dt);
             if (attackCooldownTimer > 0f) attackCooldownTimer -= dt;
             if (invulnTimer > 0f) invulnTimer -= dt;
             if (hitFlashTimer > 0f) hitFlashTimer -= dt;
@@ -560,18 +623,22 @@ namespace EcclesiaFighters
 
             if (dead)
             {
+                if (charging) SetCharging(false);
                 AnimBool(HashIsGrounded, grounded);
                 UpdatePlaceholderVisuals();
+                UpdateChargeAuraVFX(dt);
                 return;
             }
 
             if (!inputEnabled)
             {
+                if (charging) SetCharging(false);
                 SetWalking(false, false);
                 SetBlocking(false);
                 SetCrouching(false);
                 AnimBool(HashIsGrounded, grounded);
                 UpdatePlaceholderVisuals();
+                UpdateChargeAuraVFX(dt);
                 return;
             }
 
@@ -580,10 +647,23 @@ namespace EcclesiaFighters
             else
                 RefreshAIStates();
 
+            if (charging)
+            {
+                if (grounded && !isAttacking && hitstunTimer <= 0f && !IsSpecialReady)
+                    AddSpecialEnergy(chargeEnergyPerSec * dt);
+                else
+                    SetCharging(false);
+            }
+            else if (!isAttacking && !IsSpecialReady)
+            {
+                AddSpecialEnergy(passiveEnergyPerSec * dt);
+            }
+
             if (!isAttacking && hitstunTimer <= 0f) FaceOpponent();
             ClampStagePosition();
             AnimBool(HashIsGrounded, grounded);
             UpdatePlaceholderVisuals();
+            UpdateChargeAuraVFX(dt);
         }
 
         void FixedUpdate()
@@ -615,12 +695,26 @@ namespace EcclesiaFighters
             bool stunned = hitstunTimer > 0f;
             if (stunned || !grounded)
             {
+                aiWantsCharge = false;
+                SetCharging(false);
                 SetCrouching(false);
                 SetBlocking(false);
                 SetWalking(false, false);
                 devWalkJustEnded = false;
                 return;
             }
+
+            if (aiWantsCharge && !isAttacking && !IsSpecialReady && !devForceCrouch && !devForceBlock)
+            {
+                StopSprint();
+                SetWalking(false, false);
+                SetBlocking(false);
+                SetCrouching(false);
+                SetCharging(true);
+                devWalkJustEnded = false;
+                return;
+            }
+            SetCharging(false);
 
             SetCrouching((aiWantsCrouch || devForceCrouch) && !isAttacking);
             SetBlocking((aiWantsBlock || devForceBlock) && !isAttacking);
@@ -648,6 +742,7 @@ namespace EcclesiaFighters
                 holdingAway = false;
                 devWalkJustEnded = false;
                 StopSprint();
+                SetCharging(false);
                 SetWalking(false, false);
                 SetCrouching(false);
                 SetBlocking(false);
@@ -675,8 +770,10 @@ namespace EcclesiaFighters
             if (Input.GetKey(kLeft)) dir -= 1f;
             if (Input.GetKey(kRight)) dir += 1f;
 
-            bool crouchHeld = (Input.GetKey(kCrouch) || devForceCrouch) && grounded;
-            bool shiftBlock = (Input.GetKey(kBlock) || devForceBlock) && grounded;
+            bool rawCrouchHeld = Input.GetKey(kCrouch) || devForceCrouch;
+            bool rawBlockHeld = Input.GetKey(kBlock) || devForceBlock;
+            bool crouchHeld = rawCrouchHeld && grounded;
+            bool shiftBlock = rawBlockHeld && grounded;
 
             if (Input.GetKeyDown(kLeft))
             {
@@ -726,18 +823,42 @@ namespace EcclesiaFighters
             }
             devWalkJustEnded = false;
 
+            // Attacks take priority when ready (allow crisp sprint-to-attack & charge-to-attack cancels)
+            if (!isAttacking && attackCooldownTimer <= 0f)
+            {
+                if (Input.GetKeyDown(kSpecial) && TryStartSpecial()) { SetCharging(false); return; }
+                if (Input.GetKeyDown(kLightPunch)) { SetCharging(false); TryStartMelee(AttackType.LightPunch); return; }
+                if (Input.GetKeyDown(kHeavyPunch)) { SetCharging(false); TryStartMelee(AttackType.HeavyPunch); return; }
+                if (Input.GetKeyDown(kKick)) { SetCharging(false); TryStartMelee(AttackType.Kick); return; }
+            }
+
+            bool jumpPressed = Input.GetKeyDown(kJump);
+            if (charging && jumpPressed && grounded && !isAttacking)
+            {
+                SetCharging(false);
+                SetCrouching(false);
+                SetBlocking(false);
+                DoJump();
+                return;
+            }
+
+            // Risk-reward Energy Charging: hold Block + Crouch simultaneously while grounded and under 100%
+            bool wantsCharge = rawBlockHeld && rawCrouchHeld && grounded && !isAttacking && hitstunTimer <= 0f && !IsSpecialReady;
+            if (wantsCharge)
+            {
+                holdingAway = false;
+                StopSprint();
+                SetWalking(false, false);
+                SetBlocking(false);
+                SetCrouching(false);
+                SetCharging(true);
+                return;
+            }
+            SetCharging(false);
+
             holdingAway = grounded && dir != 0f && (dir * FacingDir < 0f);
 
             if (!isAttacking) SetCrouching(crouchHeld);
-
-            // Attacks take priority when ready (allow crisp sprint-to-attack cancel)
-            if (!isAttacking && attackCooldownTimer <= 0f)
-            {
-                if (Input.GetKeyDown(kSpecial)) { if (TryStartSpecial()) return; }
-                if (Input.GetKeyDown(kLightPunch)) { TryStartMelee(AttackType.LightPunch); return; }
-                if (Input.GetKeyDown(kHeavyPunch)) { TryStartMelee(AttackType.HeavyPunch); return; }
-                if (Input.GetKeyDown(kKick)) { TryStartMelee(AttackType.Kick); return; }
-            }
 
             if (isAttacking)
             {
@@ -754,7 +875,6 @@ namespace EcclesiaFighters
             SetBlocking(blockActive);
 
             // Jump (allowed when standing and not actively holding block; allows sprint-to-jump cancel)
-            bool jumpPressed = Input.GetKeyDown(kJump);
             if (jumpPressed && grounded && !crouching && !shiftBlock)
             {
                 DoJump();
@@ -935,7 +1055,7 @@ namespace EcclesiaFighters
 
         bool TryStartSpecial()
         {
-            if (!CanAct() || attackCooldownTimer > 0f || !SpecialReady) return false;
+            if (!CanAct() || attackCooldownTimer > 0f || !IsSpecialReady) return false;
             StopActiveAttack();
             attackRoutine = StartCoroutine(DoSpecialAttack());
             return true;
@@ -1058,7 +1178,9 @@ namespace EcclesiaFighters
         {
             isAttacking = true;
             currentAttack = AttackType.Special;
-            spCooldown = specialCooldown;
+            currentSpecialEnergy = 0f;
+            aiWantsCharge = false;
+            SetCharging(false);
             StopSprint();
             SetWalking(false, false);
             SetBlocking(false);
@@ -1122,11 +1244,14 @@ namespace EcclesiaFighters
             {
                 if (!h || h.transform.root == transform.root) continue;
                 FighterController target = h.GetComponentInParent<FighterController>();
-                if (!target || target == this || hitTargets.Contains(target)) continue;
+                if (!target || target == this || hitTargets.Contains(target) || target.IsDead) continue;
 
                 hitTargets.Add(target);
+                bool canAwardEnergy = !target.IsInvulnerable;
                 target.TakeDamage(spec.damage, FacingVector, spec.knockback, spec.hitstun,
                     isHeavyHit: type != AttackType.LightPunch, isSpecialProjectile: false);
+                if (canAwardEnergy)
+                    AddSpecialEnergy(type == AttackType.LightPunch ? lightHitEnergyGain : heavyHitEnergyGain);
             }
         }
 
@@ -1180,7 +1305,7 @@ namespace EcclesiaFighters
             {
                 if (!sharedFallbackProjMat)
                 {
-                    Shader s = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Standard");
+                    Shader s = FindFirstSupportedShader("Sprites/Default", "Universal Render Pipeline/Unlit", "Unlit/Color", "Standard");
                     sharedFallbackProjMat = new Material(s) { color = new Color(1f, 0.85f, 0.25f, 0.92f) };
                 }
                 mr.sharedMaterial = sharedFallbackProjMat;
@@ -1239,7 +1364,15 @@ namespace EcclesiaFighters
         {
             if (dead || invulnTimer > 0f) return;
 
-            bool blockedHit = blocking || (grounded && !isAttacking && hitstunTimer <= 0f && holdingAway);
+            bool wasCharging = charging;
+            if (charging)
+            {
+                aiWantsCharge = false;
+                SetCharging(false);
+            }
+
+            // Risk-reward rule: charging leaves fighter completely open (never blocks or auto-blocks)
+            bool blockedHit = !wasCharging && (blocking || (grounded && !isAttacking && hitstunTimer <= 0f && !crouching && holdingAway));
             float finalDmg = blockedHit ? amount * blockReduction : amount;
 
             if (isSpecialProjectile)
@@ -1279,6 +1412,7 @@ namespace EcclesiaFighters
                 hitstunTimer = 0f;
                 isSprintJump = false;
                 StopSprint();
+                SetCharging(false);
                 SetWalking(false, false);
                 SetCrouching(false);
                 SetBlocking(false);
@@ -1290,11 +1424,13 @@ namespace EcclesiaFighters
 
             if (blockedHit)
             {
+                AddSpecialEnergy(blockHitEnergyGain);
                 blockFlashTimer = 0.16f;
                 invulnTimer = 0.08f;
             }
             else
             {
+                AddSpecialEnergy(takeHitEnergyGain);
                 StopActiveAttack();
                 isSprintJump = false;
                 StopSprint();
@@ -1511,6 +1647,18 @@ namespace EcclesiaFighters
                 float strength = blockFlashTimer > 0f ? 0.80f : 0.48f;
                 ApplyRendererTint(new Color(0.32f, 0.72f, 1f, 1f), strength);
             }
+            else if (specialReadyFlashTimer > 0f)
+            {
+                DetermineChargeTheme(out Color _, out Color core);
+                float strength = Mathf.Clamp01(specialReadyFlashTimer / 0.38f) * 0.55f;
+                ApplyRendererTint(core, strength);
+            }
+            else if (charging)
+            {
+                DetermineChargeTheme(out Color primary, out Color core);
+                float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * 14f);
+                ApplyRendererTint(Color.Lerp(primary, core, pulse), 0.18f + 0.14f * pulse);
+            }
             else
             {
                 ClearRendererTint();
@@ -1606,10 +1754,11 @@ namespace EcclesiaFighters
 
                 if (!sharedHitIndicatorMat)
                 {
-                    Shader s = Shader.Find("Sprites/Default")
-                            ?? Shader.Find("Unlit/Transparent")
-                            ?? Shader.Find("Universal Render Pipeline/Unlit")
-                            ?? Shader.Find("Standard");
+                    Shader s = FindFirstSupportedShader(
+                        "Sprites/Default",
+                        "Unlit/Transparent",
+                        "Universal Render Pipeline/Unlit",
+                        "Standard");
                     sharedHitIndicatorMat = new Material(s);
                 }
                 mr.sharedMaterial = sharedHitIndicatorMat;
@@ -1736,6 +1885,345 @@ namespace EcclesiaFighters
             AnimBool(HashBlocking, v);
         }
 
+        void SetCharging(bool v)
+        {
+            if (charging == v) return;
+            charging = v;
+            if (v)
+            {
+                StopSprint();
+                SetWalking(false, false);
+                SetBlocking(false);
+                SetCrouching(false);
+                ApplyStandingColliderIfNeeded();
+                EnsureChargeAuraVFX();
+                if (chargeParticles != null && !chargeParticles.isPlaying)
+                    chargeParticles.Play();
+            }
+            else
+            {
+                if (chargeParticles != null && chargeParticles.isPlaying)
+                    chargeParticles.Stop(false, ParticleSystemStopBehavior.StopEmitting);
+            }
+            AnimBool(HashCharging, v);
+        }
+
+        void ApplyStandingColliderIfNeeded()
+        {
+            RestoreCollider();
+        }
+
+        public void AddSpecialEnergy(float amount)
+        {
+            if (dead || amount <= 0f || maxSpecialEnergy <= 0f) return;
+            bool wasReady = IsSpecialReady;
+            currentSpecialEnergy = Mathf.Clamp(currentSpecialEnergy + amount, 0f, maxSpecialEnergy);
+
+            if (!wasReady && IsSpecialReady)
+            {
+                aiWantsCharge = false;
+                if (charging) SetCharging(false);
+                specialReadyFlashTimer = 0.38f;
+                TriggerSpecialReadyBurst();
+                AudioManager.PlaySpecialReadyCue();
+            }
+        }
+
+        public void DevFillSpecial()
+        {
+            if (dead) DevReviveAndResetIdle();
+            bool wasReady = IsSpecialReady;
+            currentSpecialEnergy = Mathf.Max(0f, maxSpecialEnergy);
+            aiWantsCharge = false;
+            if (charging) SetCharging(false);
+            if (!wasReady && IsSpecialReady)
+            {
+                specialReadyFlashTimer = 0.38f;
+                TriggerSpecialReadyBurst();
+                AudioManager.PlaySpecialReadyCue();
+            }
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  Procedural Charging Aura VFX
+        // ══════════════════════════════════════════════════════
+        void DetermineChargeTheme(out Color primary, out Color core)
+        {
+            bool isKarl = !string.IsNullOrEmpty(characterName) &&
+                          (characterName.IndexOf("Karl", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                           characterName.IndexOf("Marx", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (isKarl)
+            {
+                primary = new Color(1.00f, 0.28f, 0.12f, 0.92f);
+                core    = new Color(1.00f, 0.80f, 0.24f, 1.00f);
+            }
+            else
+            {
+                primary = new Color(1.00f, 0.84f, 0.25f, 0.92f);
+                core    = new Color(1.00f, 0.97f, 0.72f, 1.00f);
+            }
+        }
+
+        void EnsureChargeAuraVFX()
+        {
+            if (chargeAuraRoot != null) return;
+
+            DetermineChargeTheme(out chargePrimaryColor, out chargeCoreColor);
+            Shader fxShader = FindFirstSupportedShader(
+                "Universal Render Pipeline/Particles/Unlit",
+                "Particles/Standard Unlit",
+                "Sprites/Default",
+                "Universal Render Pipeline/Unlit",
+                "Standard");
+            if (fxShader == null) return;
+
+            chargeAuraRoot = new GameObject("ChargeAuraVFX");
+            chargeAuraRoot.transform.SetParent(transform, false);
+            chargeAuraRoot.transform.localPosition = Vector3.zero;
+            chargeAuraRoot.transform.localRotation = Quaternion.identity;
+
+            // 1) Ground Energy Ring
+            Texture2D ringTex = GetOrCreateRingGlowTexture();
+            chargeRingMat = CreateAdditiveVfxMaterial(fxShader, ringTex);
+
+            GameObject ringGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            ringGo.name = "ChargeGroundRing";
+            Collider ringCol = ringGo.GetComponent<Collider>();
+            if (ringCol != null) Destroy(ringCol);
+
+            chargeGroundRing = ringGo.transform;
+            chargeGroundRing.SetParent(chargeAuraRoot.transform, false);
+            chargeGroundRing.localPosition = new Vector3(0f, bottomLocalY + 0.035f, 0f);
+            chargeGroundRing.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            chargeGroundRing.localScale    = new Vector3(1.55f, 1.55f, 1f);
+
+            MeshRenderer ringMr = ringGo.GetComponent<MeshRenderer>();
+            if (ringMr != null)
+            {
+                ringMr.sharedMaterial    = chargeRingMat;
+                ringMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                ringMr.receiveShadows    = false;
+            }
+            ringGo.SetActive(false);
+
+            // 2) Rising Energy Motes ParticleSystem
+            Texture2D softTex = GetOrCreateSoftGlowTexture();
+            chargeParticleMat = CreateAdditiveVfxMaterial(fxShader, softTex);
+
+            GameObject psGo = new GameObject("ChargeParticles");
+            psGo.transform.SetParent(chargeAuraRoot.transform, false);
+            psGo.transform.localPosition = new Vector3(0f, bottomLocalY + 0.08f, 0f);
+            psGo.transform.localRotation = Quaternion.identity;
+
+            chargeParticles = psGo.AddComponent<ParticleSystem>();
+            var main = chargeParticles.main;
+            main.playOnAwake     = false;
+            main.loop            = true;
+            main.simulationSpace = ParticleSystemSimulationSpace.Local;
+            main.startLifetime   = new ParticleSystem.MinMaxCurve(0.55f, 0.88f);
+            main.startSpeed      = new ParticleSystem.MinMaxCurve(1.55f, 2.75f);
+            main.startSize       = new ParticleSystem.MinMaxCurve(0.08f, 0.19f);
+            main.startColor      = new ParticleSystem.MinMaxGradient(chargePrimaryColor, chargeCoreColor);
+            main.maxParticles    = 64;
+
+            var emission = chargeParticles.emission;
+            emission.rateOverTime = 28f;
+
+            var shape = chargeParticles.shape;
+            shape.enabled   = true;
+            shape.shapeType = ParticleSystemShapeType.Circle;
+            shape.radius    = 0.48f;
+            shape.rotation  = new Vector3(-90f, 0f, 0f);
+
+            var colLife = chargeParticles.colorOverLifetime;
+            colLife.enabled = true;
+            Gradient grad = new Gradient();
+            grad.SetKeys(
+                new[] { new GradientColorKey(chargeCoreColor, 0f), new GradientColorKey(chargePrimaryColor, 1f) },
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.95f, 0.18f), new GradientAlphaKey(0.75f, 0.65f), new GradientAlphaKey(0f, 1f) });
+            colLife.color = new ParticleSystem.MinMaxGradient(grad);
+
+            var sizeLife = chargeParticles.sizeOverLifetime;
+            sizeLife.enabled = true;
+            sizeLife.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+                new Keyframe(0f, 0.65f),
+                new Keyframe(0.35f, 1.15f),
+                new Keyframe(1f, 0.15f)));
+
+            ParticleSystemRenderer psr = psGo.GetComponent<ParticleSystemRenderer>();
+            if (psr != null)
+            {
+                psr.sharedMaterial    = chargeParticleMat;
+                psr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                psr.receiveShadows    = false;
+            }
+            chargeParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            // 3) Aura Point Light
+            GameObject lightGo = new GameObject("ChargePointLight");
+            lightGo.transform.SetParent(chargeAuraRoot.transform, false);
+            lightGo.transform.localPosition = new Vector3(0f, StandingChestLocalHeight(), 0f);
+            chargePointLight           = lightGo.AddComponent<Light>();
+            chargePointLight.type      = LightType.Point;
+            chargePointLight.range     = 3.1f;
+            chargePointLight.color     = chargeCoreColor;
+            chargePointLight.intensity = 0f;
+            chargePointLight.shadows   = LightShadows.None;
+            chargePointLight.enabled   = false;
+        }
+
+        void TriggerSpecialReadyBurst()
+        {
+            EnsureChargeAuraVFX();
+            if (chargeParticles != null)
+                chargeParticles.Emit(24);
+        }
+
+        void UpdateChargeAuraVFX(float dt)
+        {
+            bool activeEffect = charging || specialReadyFlashTimer > 0f || chargeAuraIntensity > 0.01f;
+            if (!activeEffect) return;
+            if (chargeAuraRoot == null)
+            {
+                if (!charging && specialReadyFlashTimer <= 0f) return;
+                EnsureChargeAuraVFX();
+                if (chargeAuraRoot == null) return;
+            }
+
+            DetermineChargeTheme(out chargePrimaryColor, out chargeCoreColor);
+            float targetIntensity = charging ? 1f : 0f;
+            chargeAuraIntensity = Mathf.MoveTowards(chargeAuraIntensity, targetIntensity, Mathf.Max(0.001f, dt) * 7f);
+            float flashNorm = Mathf.Clamp01(specialReadyFlashTimer / 0.38f);
+            float visualLevel = Mathf.Clamp01(Mathf.Max(chargeAuraIntensity, flashNorm));
+
+            if (chargeGroundRing != null)
+            {
+                bool showRing = visualLevel > 0.02f;
+                if (chargeGroundRing.gameObject.activeSelf != showRing)
+                    chargeGroundRing.gameObject.SetActive(showRing);
+
+                if (showRing)
+                {
+                    chargeRingAngle = (chargeRingAngle + dt * 115f) % 360f;
+                    float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * 11f);
+                    float scale = Mathf.Lerp(1.30f, 1.72f, visualLevel) + pulse * 0.10f * visualLevel + flashNorm * 0.32f;
+                    chargeGroundRing.localRotation = Quaternion.Euler(90f, chargeRingAngle, 0f);
+                    chargeGroundRing.localScale    = new Vector3(scale, scale, 1f);
+
+                    if (chargeRingMat != null)
+                    {
+                        Color rc = Color.Lerp(chargePrimaryColor, chargeCoreColor, pulse * 0.5f + flashNorm * 0.5f);
+                        rc.a = visualLevel * 0.85f;
+                        chargeRingMat.color = rc;
+                        if (chargeRingMat.HasProperty(ShaderColorId)) chargeRingMat.SetColor(ShaderColorId, rc);
+                        if (chargeRingMat.HasProperty(ShaderBaseColorId)) chargeRingMat.SetColor(ShaderBaseColorId, rc);
+                    }
+                }
+            }
+
+            if (chargePointLight != null)
+            {
+                float lightPulse = charging ? (2.1f + 0.55f * Mathf.Sin(Time.time * 10f)) : 0f;
+                float intensity = Mathf.Max(lightPulse * chargeAuraIntensity, flashNorm * 4.2f);
+                chargePointLight.intensity = intensity;
+                chargePointLight.color     = Color.Lerp(chargePrimaryColor, chargeCoreColor, 0.45f + flashNorm * 0.55f);
+                chargePointLight.enabled   = intensity > 0.03f;
+            }
+        }
+
+        static Shader FindFirstSupportedShader(params string[] names)
+        {
+            for (int i = 0; i < names.Length; i++)
+            {
+                Shader s = Shader.Find(names[i]);
+                if (s != null) return s;
+            }
+            return null;
+        }
+
+        static Material CreateAdditiveVfxMaterial(Shader shader, Texture2D tex)
+        {
+            var mat = new Material(shader);
+            mat.mainTexture = tex;
+            mat.color       = Color.white;
+            if (mat.HasProperty("_MainTex"))   mat.SetTexture("_MainTex", tex);
+            if (mat.HasProperty("_BaseMap"))   mat.SetTexture("_BaseMap", tex);
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
+            if (mat.HasProperty("_Surface"))   mat.SetFloat("_Surface", 1f);
+            if (mat.HasProperty("_Blend"))     mat.SetFloat("_Blend", 2f);
+            if (mat.HasProperty("_Cull"))      mat.SetFloat("_Cull", 0f);
+            if (mat.HasProperty("_SrcBlend"))  mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            if (mat.HasProperty("_DstBlend"))  mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.One);
+            if (mat.HasProperty("_ZWrite"))    mat.SetInt("_ZWrite", 0);
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.EnableKeyword("_BLENDMODE_ADD");
+            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            return mat;
+        }
+
+        static Texture2D GetOrCreateSoftGlowTexture()
+        {
+            if (sharedSoftGlowTex != null) return sharedSoftGlowTex;
+
+            const int size = 64;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.wrapMode = TextureWrapMode.Clamp;
+            Color[] pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                float ny = (y + 0.5f) / size * 2f - 1f;
+                for (int x = 0; x < size; x++)
+                {
+                    float nx = (x + 0.5f) / size * 2f - 1f;
+                    float r2 = nx * nx + ny * ny;
+                    float a = Mathf.Clamp01(1f - r2);
+                    a *= a;
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, a);
+                }
+            }
+            tex.SetPixels(pixels);
+            tex.Apply(false, true);
+            sharedSoftGlowTex = tex;
+            return sharedSoftGlowTex;
+        }
+
+        static Texture2D GetOrCreateRingGlowTexture()
+        {
+            if (sharedRingGlowTex != null) return sharedRingGlowTex;
+
+            const int size = 128;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.wrapMode = TextureWrapMode.Clamp;
+            Color[] pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                float ny = (y + 0.5f) / size * 2f - 1f;
+                for (int x = 0; x < size; x++)
+                {
+                    float nx = (x + 0.5f) / size * 2f - 1f;
+                    float r = Mathf.Sqrt(nx * nx + ny * ny);
+                    float ang = Mathf.Atan2(ny, nx);
+
+                    float outerBand = Mathf.Exp(-Mathf.Pow((r - 0.78f) / 0.085f, 2f));
+                    float innerBand = Mathf.Exp(-Mathf.Pow((r - 0.52f) / 0.055f, 2f)) * 0.75f;
+                    float runeMod   = 0.78f + 0.22f * Mathf.Cos(ang * 8f);
+                    float edgeFade  = r <= 1f ? Mathf.Clamp01((1f - r) * 5f) : 0f;
+                    float alpha     = Mathf.Clamp01((outerBand + innerBand) * runeMod * edgeFade);
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                }
+            }
+            tex.SetPixels(pixels);
+            tex.Apply(false, true);
+            sharedRingGlowTex = tex;
+            return sharedRingGlowTex;
+        }
+
+        void OnDestroy()
+        {
+            if (chargeParticleMat != null) Destroy(chargeParticleMat);
+            if (chargeRingMat != null)     Destroy(chargeRingMat);
+        }
+
         /// <summary>Clears pending triggers and returns the Animator to Idle on round reset.</summary>
         void ResetAnimator()
         {
@@ -1746,6 +2234,7 @@ namespace EcclesiaFighters
             AnimBool(HashRunningBack, false);
             AnimBool(HashCrouching, false);
             AnimBool(HashBlocking, false);
+            AnimBool(HashCharging, false);
             AnimBool(HashIsGrounded, grounded);
             foreach (var kv in animParams)
                 if (kv.Value == AnimatorControllerParameterType.Trigger) anim.ResetTrigger(kv.Key);
@@ -1773,7 +2262,9 @@ namespace EcclesiaFighters
             devWalkJustEnded = false;
             aiWantsCrouch = false;
             aiWantsBlock = false;
+            aiWantsCharge = false;
             holdingAway = false;
+            SetCharging(false);
             SetWalking(false, false);
             SetCrouching(false);
             SetBlocking(false);
@@ -1790,7 +2281,8 @@ namespace EcclesiaFighters
             hitFlashTimer = 0f;
             blockFlashTimer = 0f;
             attackCooldownTimer = 0f;
-            spCooldown = 0f;
+            currentSpecialEnergy = 0f;
+            specialReadyFlashTimer = 0f;
 
             DevClearOverrides();
             RestoreCollider();
@@ -1798,6 +2290,7 @@ namespace EcclesiaFighters
 
             if (rb) rb.velocity = Vector3.zero;
             ResetVisualPose();
+            UpdateChargeAuraVFX(0f);
 
             if (animReady && anim)
             {
@@ -1837,6 +2330,7 @@ namespace EcclesiaFighters
             RestoreCollider();
             AnimTrigger(HashDeath);
             UpdatePlaceholderVisuals();
+            UpdateChargeAuraVFX(0f);
 
             if (triggerKOEvent) OnKO?.Invoke();
         }
@@ -1878,6 +2372,8 @@ namespace EcclesiaFighters
             StopActiveAttack();
             devForceBlock = false;
             aiWantsBlock = false;
+            aiWantsCharge = false;
+            SetCharging(false);
             SetBlocking(false);
             hitstunTimer = 0f;
             attackCooldownTimer = 0f;
@@ -1898,6 +2394,8 @@ namespace EcclesiaFighters
             devForceBlock = false;
             aiWantsCrouch = false;
             aiWantsBlock = false;
+            aiWantsCharge = false;
+            SetCharging(false);
             hitstunTimer = 0f;
             DoJump();
         }
@@ -1906,7 +2404,7 @@ namespace EcclesiaFighters
         {
             if (active && dead) DevReviveAndResetIdle();
             devForceCrouch = active;
-            if (active) { devForceBlock = false; SetBlocking(false); }
+            if (active) { devForceBlock = false; aiWantsCharge = false; SetCharging(false); SetBlocking(false); }
             SetCrouching(active && !isAttacking);
         }
 
@@ -1918,6 +2416,8 @@ namespace EcclesiaFighters
             devForceBlock = active;
             if (active)
             {
+                aiWantsCharge = false;
+                SetCharging(false);
                 devWalkTimer = 0f;
                 devWalkJustEnded = false;
                 SetWalking(false, false);
@@ -1936,6 +2436,8 @@ namespace EcclesiaFighters
             StopActiveAttack();
             devForceBlock = false;
             aiWantsBlock = false;
+            aiWantsCharge = false;
+            SetCharging(false);
             SetBlocking(false);
             devWalkRelDir = relativeDir >= 0 ? 1 : -1;
             devWalkTimer = Mathf.Max(0.05f, duration);
