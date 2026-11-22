@@ -103,6 +103,7 @@ namespace EcclesiaFighters
 
             if (Input.GetKeyDown(KeyCode.Escape))
             {
+                AudioManager.PlayUIBack();
                 CancelListening();
                 ClearFocus();
                 RefreshKeyButtons();
@@ -170,6 +171,7 @@ namespace EcclesiaFighters
         /// <summary>APLICAR — commit video, audio, and pending keybindings and save.</summary>
         public void Apply()
         {
+            AudioManager.PlayUIConfirm();
             CancelListening();
 
             QualitySettings.SetQualityLevel(pQuality, true);
@@ -229,6 +231,7 @@ namespace EcclesiaFighters
         /// <summary>VOLTAR — drop unapplied changes across both tabs.</summary>
         public void Discard()
         {
+            AudioManager.PlayUIBack();
             CancelListening();
             LoadAppliedIntoPending();
             RefreshUI();
@@ -584,6 +587,9 @@ namespace EcclesiaFighters
 
         void PreviewAudio()
         {
+            if (AudioManager.Instance)
+                AudioManager.Instance.SetVolumes(pMaster, pMusic, pSfx, pVoice);
+
             if (audioMixer)
             {
                 audioMixer.SetFloat("Vol_Master", SettingsStore.ToDb(pMaster));
@@ -617,9 +623,21 @@ namespace EcclesiaFighters
             return n.Length / 2;
         }
 
-        /// <summary>Master → AudioListener.volume, Música → every BGM AudioSource.</summary>
+        /// <summary>Master / Music / SFX / Voice routed cleanly through AudioManager (without double AudioListener attenuation).</summary>
         public static void ApplyAudioFallback(float master, float music)
         {
+            var am = AudioManager.Instance;
+            if (am != null)
+            {
+                AudioListener.volume = 1f;
+                am.SetVolumes(
+                    master,
+                    music,
+                    PlayerPrefs.GetFloat(KSfx,   1f),
+                    PlayerPrefs.GetFloat(KVoice, 1f));
+                return;
+            }
+
             AudioListener.volume = Mathf.Clamp01(master);
             foreach (AudioSource s in UnityEngine.Object.FindObjectsOfType<AudioSource>())
                 if (s != null && s.gameObject.name == "BGM") s.volume = Mathf.Clamp01(music);

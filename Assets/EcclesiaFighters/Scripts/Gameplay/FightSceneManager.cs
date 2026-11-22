@@ -78,6 +78,7 @@ namespace EcclesiaFighters
             // Map (0 = Nave Central / Exterior key, 1 = Altar Sagrado / Interior key)
             string map = PlayerPrefs.GetString("SelectedMap", "Exterior");
             int stageIdx = (map == "Interior" || map == "1") ? 1 : 0;
+            AudioManager.PlayStageBGM(stageIdx);
 
             if (!stageController)
                 stageController = FindObjectOfType<ChurchStageController>();
@@ -191,7 +192,11 @@ namespace EcclesiaFighters
         IEnumerator RoundIntro()
         {
             hud.alpha = 0;
-            yield return (showCenterRoutine = StartCoroutine(ShowCenter($"ROUND {round}", 1.2f, 1f)));
+            bool isFinalRound = (round >= roundsToWin * 2 - 1) || (wA == roundsToWin - 1 && wB == roundsToWin - 1 && round > 1);
+            string roundBanner = isFinalRound ? "FINAL ROUND" : $"ROUND {round}";
+            AudioManager.PlayRoundIntroVoice(round, isFinalRound);
+            yield return (showCenterRoutine = StartCoroutine(ShowCenter(roundBanner, 1.2f, 1f)));
+            AudioManager.PlayFightVoice();
             yield return (showCenterRoutine = StartCoroutine(ShowCenter("FIGHT!", 0.7f, 1.5f)));
             yield return FadeFloat(v => hud.alpha = v, 0, 1, 0.3f);
         }
@@ -202,6 +207,7 @@ namespace EcclesiaFighters
             roundActive    = false;
             inMatchEndFlow = true;
             fightOverlay?.ForceClosePauseForEndScreen();
+            AudioManager.PlayKO();
             ctrlA?.SetInputEnabled(false);
             ctrlB?.SetInputEnabled(false);
             if (aWins) wA++; else wB++;
@@ -232,6 +238,13 @@ namespace EcclesiaFighters
 
         IEnumerator GameOver(bool aWins)
         {
+            bool p1AI = ctrlA ? !ctrlA.isPlayerControlled : (PlayerPrefs.GetInt("P1IsAI", 0) == 1);
+            bool p2AI = ctrlB ? !ctrlB.isPlayerControlled : (PlayerPrefs.GetInt("P2IsAI", 1) == 1);
+            bool soloHumanVsAI = p1AI != p2AI;
+            bool humanWon      = (!p1AI && aWins) || (!p2AI && !aWins);
+            bool isVictory     = !soloHumanVsAI || humanWon;
+            AudioManager.PlayMatchEnd(isVictory);
+
             string winner = aWins ? (ctrlA ? ctrlA.characterName : "Jogador 1")
                                   : (ctrlB ? ctrlB.characterName : "Jogador 2");
             yield return (showCenterRoutine = StartCoroutine(ShowCenter(winner.ToUpper() + "\nVITÓRIA TOTAL!", 3f, 1.2f)));

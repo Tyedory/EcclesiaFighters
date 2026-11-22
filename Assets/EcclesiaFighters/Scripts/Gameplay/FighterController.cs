@@ -223,6 +223,8 @@ namespace EcclesiaFighters
         float stageZ;
 
         bool grounded = true, blocking, crouching, dead, inputEnabled;
+        bool hasBeenAirborne;
+        float lastSpawnOrResetTime, lastLandSfxTime = -10f;
         bool walkingForward, walkingBackward;
         bool holdingAway, aiWantsBlock, aiWantsCrouch;
         bool devForceCrouch, devForceBlock, devWalkJustEnded;
@@ -275,6 +277,7 @@ namespace EcclesiaFighters
 
             rb.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionZ;
             stageZ = transform.position.z;
+            lastSpawnOrResetTime = Time.time;
 
             if (capsule)
             {
@@ -326,8 +329,10 @@ namespace EcclesiaFighters
             hitFlashTimer       = 0f;
             blockFlashTimer     = 0f;
             jumpGraceTimer      = 0f;
-            dead                = false;
-            grounded            = true;
+            dead                 = false;
+            grounded             = true;
+            hasBeenAirborne      = false;
+            lastSpawnOrResetTime = Time.time;
             holdingAway         = false;
             aiWantsBlock        = false;
             aiWantsCrouch       = false;
@@ -547,7 +552,7 @@ namespace EcclesiaFighters
         void FixedUpdate()
         {
             if (jumpGraceTimer <= 0f)
-                grounded = (Time.time - lastGroundContactTime) < 0.08f || CheckFeetGrounded();
+                SetGroundedState((Time.time - lastGroundContactTime) < 0.08f || CheckFeetGrounded());
             AnimBool(HashIsGrounded, grounded);
 
             if (rb)
@@ -729,6 +734,7 @@ namespace EcclesiaFighters
         void DoJump()
         {
             grounded        = false;
+            hasBeenAirborne = true;
             jumpGraceTimer  = 0.12f;
             SetWalking(false, false);
             SetCrouching(false);
@@ -741,6 +747,7 @@ namespace EcclesiaFighters
                 rb.velocity = v;
                 rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
             }
+            AudioManager.PlayJump();
             AnimBool(HashIsGrounded, false);
             AnimTrigger(HashJump);
         }
@@ -835,6 +842,9 @@ namespace EcclesiaFighters
             SetBlocking(false);
             TriggerAttackAnimation(type);
 
+            if (type == AttackType.LightPunch) AudioManager.PlayPunchLight();
+            else                               AudioManager.PlayPunchHeavy();
+
             // 1) Startup (synced to impact frame when animated, fast fallback otherwise)
             attackPhase = AttackPhase.Startup;
             yield return RunPhaseTimer(GetEffectiveMeleeStartup(type, spec));
@@ -857,7 +867,7 @@ namespace EcclesiaFighters
                     SpawnHitIndicator(hitCenter, spec.hitHalfExtents, type, forceShowMoveHitboxes);
                 }
 
-                CheckMeleeOverlap(hitCenter, spec, hitTargets);
+                CheckMeleeOverlap(hitCenter, type, spec, hitTargets);
                 activeElapsed += Time.deltaTime;
                 yield return null;
             }
@@ -932,7 +942,7 @@ namespace EcclesiaFighters
             return new Vector3(transform.position.x, hitY, transform.position.z) + FacingVector * spec.range;
         }
 
-        void CheckMeleeOverlap(Vector3 hitCenter, AttackConfig spec, HashSet<FighterController> hitTargets)
+        void CheckMeleeOverlap(Vector3 hitCenter, AttackType type, AttackConfig spec, HashSet<FighterController> hitTargets)
         {
             Physics.SyncTransforms();
             Collider[] hits = Physics.OverlapBox(hitCenter, spec.hitHalfExtents, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
@@ -943,7 +953,8 @@ namespace EcclesiaFighters
                 if (!target || target == this || hitTargets.Contains(target)) continue;
 
                 hitTargets.Add(target);
-                target.TakeDamage(spec.damage, FacingVector, spec.knockback, spec.hitstun);
+                target.TakeDamage(spec.damage, FacingVector, spec.knockback, spec.hitstun,
+                    isHeavyHit: type != AttackType.LightPunch, isSpecialProjectile: false);
             }
         }
 
@@ -965,6 +976,7 @@ namespace EcclesiaFighters
             ProjectileDamage pd = proj.GetComponent<ProjectileDamage>();
             if (pd) { pd.damage = specialDamage; pd.owner = gameObject; }
 
+            AudioManager.PlaySpecialLaunch();
             Destroy(proj, 3f);
         }
 
@@ -1042,15 +1054,34 @@ namespace EcclesiaFighters
             Vector3 kbDir = opponent
                 ? (transform.position.x >= opponent.position.x ? Vector3.right : Vector3.left)
                 : -FacingVector;
-            TakeDamage(amount, kbDir, 4.0f, 0.24f);
+            TakeDamage(amount, kbDir, 4.0f, 0.24f, isHeavyHit: true, isSpecialProjectile: true);
         }
 
-        public void TakeDamage(float amount, Vector3 knockbackDir, float knockbackForce, float hitstunDuration)
+        public void TakeDamage(float amount, Vector3 knockbackDir, float knockbackForce, float hitstunDuration,
+            bool isHeavyHit = false, bool isSpecialProjectile = false)
         {
             if (dead || invulnTimer > 0f) return;
 
             bool blockedHit = blocking || (grounded && !isAttacking && hitstunTimer <= 0f && holdingAway);
             float finalDmg  = blockedHit ? amount * blockReduction : amount;
+
+            if (isSpecialProjectile)
+            {
+                AudioManager.PlaySpecialImpact();
+                if (blockedHit) AudioManager.PlayBlock();
+            }
+            else if (blockedHit)
+            {
+                AudioManager.PlayBlock();
+            }
+            else if (isHeavyHit)
+            {
+                AudioManager.PlayHitHeavy();
+            }
+            else
+            {
+                AudioManager.PlayHitLight();
+            }
 
             hp = infiniteHP ? maxHP : Mathf.Max(0f, hp - finalDmg);
             if (hpBar) hpBar.value = hp / maxHP;
@@ -1130,6 +1161,23 @@ namespace EcclesiaFighters
             return false;
         }
 
+        void SetGroundedState(bool newGrounded)
+        {
+            if (!newGrounded && (Time.time - lastSpawnOrResetTime > 0.25f))
+                hasBeenAirborne = true;
+
+            if (newGrounded && !grounded && hasBeenAirborne)
+            {
+                hasBeenAirborne = false;
+                if (Time.time - lastLandSfxTime > 0.12f)
+                {
+                    lastLandSfxTime = Time.time;
+                    AudioManager.PlayLand();
+                }
+            }
+            grounded = newGrounded;
+        }
+
         void RecordGroundContact(Collision col)
         {
             if (col.transform.root == transform.root) return;
@@ -1138,7 +1186,7 @@ namespace EcclesiaFighters
                 if (col.GetContact(i).normal.y > 0.5f)
                 {
                     lastGroundContactTime = Time.time;
-                    if (jumpGraceTimer <= 0f) grounded = true;
+                    if (jumpGraceTimer <= 0f) SetGroundedState(true);
                     return;
                 }
             }

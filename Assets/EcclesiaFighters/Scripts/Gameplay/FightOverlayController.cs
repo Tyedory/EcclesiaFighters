@@ -183,6 +183,7 @@ namespace EcclesiaFighters
         public void DismissPreFightSplash()
         {
             if (!IsPreFightOpen && preFightDismissed) return;
+            AudioManager.PlayUIConfirm();
             IsPreFightOpen    = false;
             preFightDismissed = true;
             if (preFightRoot) preFightRoot.SetActive(false);
@@ -204,6 +205,7 @@ namespace EcclesiaFighters
             Time.timeScale = 0f;
             IsPaused       = true;
 
+            AudioManager.PlayUIClick();
             SyncAudioSlidersFromPrefs();
             if (pauseRoot) pauseRoot.SetActive(true);
             ClearEventSystemSelection();
@@ -219,6 +221,7 @@ namespace EcclesiaFighters
                 audioDirty = false;
             }
 
+            AudioManager.PlayUIBack();
             if (pauseRoot) pauseRoot.SetActive(false);
             IsPaused       = false;
             Time.timeScale = savedTimeScale > 0.001f ? savedTimeScale : 1f;
@@ -594,13 +597,13 @@ namespace EcclesiaFighters
                 ColAntiqueGold, ColBrightGold, ColInkDark, 0f, 50f, 18, Resume);
 
             CreateActionButton(card.transform, "REINICIAR LUTA",
-                ColBurgundy, ColAntiqueGold, ColIvory, 0f, 50f, 17, () => LoadCleanScene("FightScene"));
+                ColBurgundy, ColAntiqueGold, ColIvory, 0f, 50f, 17, () => { AudioManager.PlayUIConfirm(); LoadCleanScene("FightScene"); });
 
             CreateActionButton(card.transform, "SELEÇÃO DE PERSONAGENS",
-                ColCardSurface, ColAntiqueGold, ColIvory, 0f, 50f, 17, () => LoadCleanScene("CharSelect"));
+                ColCardSurface, ColAntiqueGold, ColIvory, 0f, 50f, 17, () => { AudioManager.PlayUIBack(); LoadCleanScene("CharSelect"); });
 
             CreateActionButton(card.transform, "MENU PRINCIPAL",
-                ColCrimsonDark, ColMutedGold, ColIvory, 0f, 50f, 17, () => LoadCleanScene("TitleScreen"));
+                ColCrimsonDark, ColMutedGold, ColIvory, 0f, 50f, 17, () => { AudioManager.PlayUIBack(); LoadCleanScene("TitleScreen"); });
 
             pauseRoot.SetActive(false);
         }
@@ -717,7 +720,13 @@ namespace EcclesiaFighters
 
             float master = masterSlider ? masterSlider.value : PlayerPrefs.GetFloat(SettingsStore.KMaster, 1f);
             float music  = musicSlider  ? musicSlider.value  : PlayerPrefs.GetFloat(SettingsStore.KMusic,  1f);
-            SettingsStore.ApplyAudioFallback(master, music);
+            float sfx    = sfxSlider    ? sfxSlider.value    : PlayerPrefs.GetFloat(SettingsStore.KSfx,    1f);
+            float voice  = voiceSlider  ? voiceSlider.value  : PlayerPrefs.GetFloat(SettingsStore.KVoice,  1f);
+
+            if (AudioManager.Instance)
+                AudioManager.Instance.SetVolumes(master, music, sfx, voice);
+            else
+                SettingsStore.ApplyAudioFallback(master, music);
         }
 
         // ══════════════════════════════════════════════════════
@@ -789,6 +798,8 @@ namespace EcclesiaFighters
             if (onClick != null)
                 btn.onClick.AddListener(() => onClick());
 
+            go.AddComponent<OverlayButtonHoverSfx>();
+
             Text txt = CreateLabel("Label", go.transform, label, fontSize, FontStyle.Bold, textColor, TextAnchor.MiddleCenter);
             txt.resizeTextForBestFit = true;
             txt.resizeTextMinSize    = 12;
@@ -796,6 +807,11 @@ namespace EcclesiaFighters
             StretchWithPadding(txt.GetComponent<RectTransform>(), 14f, 4f);
 
             return btn;
+        }
+
+        sealed class OverlayButtonHoverSfx : MonoBehaviour, IPointerEnterHandler
+        {
+            public void OnPointerEnter(PointerEventData eventData) => AudioManager.PlayUIHover();
         }
 
         static void SetLayoutHeight(GameObject go, float height)

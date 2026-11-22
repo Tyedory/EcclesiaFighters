@@ -42,6 +42,11 @@ namespace EcclesiaFighters
         public float selectedScale   = 1.035f;
         public float transitionSpeed = 16f;
 
+        public enum UISoundRole { Auto = 0, StandardClick = 1, Confirm = 2, Back = 3, None = 4 }
+
+        [Header("Audio")]
+        public UISoundRole clickSoundRole = UISoundRole.Auto;
+
         Selectable selectable;
         Outline    labelOutline;
         Shadow     labelShadow;
@@ -54,6 +59,8 @@ namespace EcclesiaFighters
             baseScale  = transform.localScale;
             if (driveBackgroundColor && !targetBackground) targetBackground = GetComponent<Graphic>();
             if (!targetLabel) targetLabel = GetComponentInChildren<Text>();
+            if (GetComponent<Button>() is Button btn)
+                btn.onClick.AddListener(HandleButtonClickSound);
             CacheLabelEffects();
             ApplyImmediate();
         }
@@ -88,10 +95,51 @@ namespace EcclesiaFighters
             if (!gameObject.activeInHierarchy) ApplyImmediate();
         }
 
-        public void OnPointerEnter(PointerEventData e) { hovered = true; }
+        public void OnPointerEnter(PointerEventData e)
+        {
+            if (!hovered && IsInteractable()) AudioManager.PlayUIHover();
+            hovered = true;
+        }
         public void OnPointerExit(PointerEventData e)  { hovered = false; pressed = false; }
         public void OnPointerDown(PointerEventData e)  { if (IsInteractable()) pressed = true; }
         public void OnPointerUp(PointerEventData e)    { pressed = false; }
+
+        void HandleButtonClickSound()
+        {
+            if (!IsInteractable()) return;
+            switch (ResolveSoundRole())
+            {
+                case UISoundRole.Confirm:       AudioManager.PlayUIConfirm(); break;
+                case UISoundRole.Back:          AudioManager.PlayUIBack();    break;
+                case UISoundRole.StandardClick: AudioManager.PlayUIClick();   break;
+                case UISoundRole.None:          break;
+            }
+        }
+
+        UISoundRole ResolveSoundRole()
+        {
+            if (clickSoundRole != UISoundRole.Auto) return clickSoundRole;
+
+            string objName = gameObject.name.ToUpperInvariant();
+            string lblText = targetLabel ? targetLabel.text.ToUpperInvariant() : string.Empty;
+
+            if (ContainsAny(objName, lblText, "VOLTAR", "SAIR", "CANCEL", "BACK"))
+                return UISoundRole.Back;
+            if (ContainsAny(objName, lblText, "CONFIRMAR", "INICIAR", "APLICAR", "ENTENDI", "CONFIRM"))
+                return UISoundRole.Confirm;
+
+            return UISoundRole.StandardClick;
+        }
+
+        static bool ContainsAny(string a, string b, params string[] tokens)
+        {
+            for (int i = 0; i < tokens.Length; i++)
+            {
+                string t = tokens[i];
+                if (a.Contains(t) || b.Contains(t)) return true;
+            }
+            return false;
+        }
 
         bool IsInteractable() => selectable == null || selectable.IsInteractable();
 

@@ -42,9 +42,13 @@ namespace EcclesiaFighters
             if (mapSelectPanel)  mapSelectPanel.SetActive(false);
             if (settingsPanel) settingsPanel.SetActive(false);
             fadeOverlay.color = Color.black;
-            bgmSource.clip = bgmTitleClip;
-            bgmSource.loop = true;
-            bgmSource.Play();
+            if (bgmSource)
+            {
+                bgmSource.Stop();
+                bgmSource.playOnAwake = false;
+                bgmSource.enabled     = false;
+            }
+            AudioManager.PlayTitleBGM();
             StartCoroutine(IntroSequence());
             StartCoroutine(LightningLoop());
         }
@@ -53,9 +57,15 @@ namespace EcclesiaFighters
         {
             if (!titlePanel.activeSelf) return;
             if (Input.GetKeyDown(KeyCode.DownArrow))
+            {
+                AudioManager.PlayUIHover();
                 UpdateSel((selectedIndex + 1) % menuButtons.Length);
+            }
             if (Input.GetKeyDown(KeyCode.UpArrow))
+            {
+                AudioManager.PlayUIHover();
                 UpdateSel((selectedIndex + menuButtons.Length - 1) % menuButtons.Length);
+            }
             if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space))
                 menuButtons[selectedIndex].onClick.Invoke();
         }
@@ -128,7 +138,7 @@ namespace EcclesiaFighters
         IEnumerator TransitionTo(GameObject target, AudioClip clip)
         {
             yield return Fade(0, 1, 0.4f);
-            if (clip != null && bgmSource.clip != clip) { bgmSource.Stop(); bgmSource.clip = clip; bgmSource.Play(); }
+            if (target == charSelectPanel) AudioManager.PlayCharSelectBGM();
             titlePanel.SetActive(false);
             target.SetActive(true);
             yield return Fade(1, 0, 0.4f);
@@ -142,13 +152,13 @@ namespace EcclesiaFighters
             yield return Fade(1, 0, 0.35f);
         }
 
-        public void ReturnToTitle()   => StartCoroutine(BackToTitle());
-        public void ReturnToCharSel() => StartCoroutine(BackToChar());
+        public void ReturnToTitle()   { AudioManager.PlayUIBack(); StartCoroutine(BackToTitle()); }
+        public void ReturnToCharSel() { AudioManager.PlayUIBack(); StartCoroutine(BackToChar()); }
 
         IEnumerator BackToTitle()
         {
             yield return Fade(0, 1, 0.35f);
-            bgmSource.Stop(); bgmSource.clip = bgmTitleClip; bgmSource.Play();
+            AudioManager.PlayTitleBGM();
             if (charSelectPanel) charSelectPanel.SetActive(false);
             if (mapSelectPanel)  mapSelectPanel.SetActive(false);
             if (settingsPanel) settingsPanel.SetActive(false);
@@ -159,6 +169,7 @@ namespace EcclesiaFighters
         IEnumerator BackToChar()
         {
             yield return Fade(0, 1, 0.3f);
+            AudioManager.PlayCharSelectBGM();
             mapSelectPanel.SetActive(false);
             charSelectPanel.SetActive(true);
             yield return Fade(1, 0, 0.3f);

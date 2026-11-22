@@ -21,8 +21,14 @@ namespace EcclesiaFighters
         void OnTriggerEnter(Collider other)
         {
             if (other.gameObject == owner) return;
-            var f = other.GetComponent<FighterController>();
-            if (f != null) { f.TakeDamage(damage); Destroy(gameObject); return; }
+            var f = other.GetComponentInParent<FighterController>();
+            if (f != null && f.gameObject != owner)
+            {
+                Vector3 kbDir = f.transform.position.x >= transform.position.x ? Vector3.right : Vector3.left;
+                f.TakeDamage(damage, kbDir, 4.0f, 0.24f, isHeavyHit: true, isSpecialProjectile: true);
+                Destroy(gameObject);
+                return;
+            }
             if (other.CompareTag("Ground") || other.CompareTag("Wall"))
                 Destroy(gameObject);
         }

@@ -1,0 +1,95 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5812bf270e6a0f64d84f4c22c17c9fcc, type: 3}
+  m_Name: EcclesiaAudioLibrary
+  m_EditorClassIdentifier: 
+  bgmTitleScreen:
+    clip: {fileID: 8300000, guid: 222bb1ae05aad0f449af02d102f0bf6f, type: 3}
+    volumeScale: 0.32
+  bgmCharSelect:
+    clip: {fileID: 8300000, guid: 4b03680abbc511244b3e467401a7609d, type: 3}
+    volumeScale: 1
+  battleTheme1:
+    clip: {fileID: 8300000, guid: 02252cdcd3e412147b7969d186eb58f4, type: 3}
+    volumeScale: 0.72
+  battleTheme2:
+    clip: {fileID: 8300000, guid: 808c8d6e23740774d8f12578a036f758, type: 3}
+    volumeScale: 0.72
+  sfxMenuHover:
+    clip: {fileID: 8300000, guid: df6c9668f76ff104e8665cb80dde0cfd, type: 3}
+    volumeScale: 0.55
+  sfxMenuClick:
+    clip: {fileID: 8300000, guid: 714d78b6dfb1d8b489c34221eaa17c18, type: 3}
+    volumeScale: 0.75
+  sfxMenuConfirm:
+    clip: {fileID: 8300000, guid: 3b8cb1ed027275d4dbd624a70927d3cd, type: 3}
+    volumeScale: 0.85
+  sfxMenuBack:
+    clip: {fileID: 8300000, guid: 1ea7549e2c03203448f98c0365f19099, type: 3}
+    volumeScale: 0.28
+  sfxPunchLight:
+    clip: {fileID: 8300000, guid: 43a1d4d211091ab46a716e5910d431fd, type: 3}
+    volumeScale: 0.75
+  sfxPunchHeavy:
+    clip: {fileID: 8300000, guid: d16b3a0c203959c43836a6b4212176da, type: 3}
+    volumeScale: 0.85
+  sfxHitLight:
+    clip: {fileID: 8300000, guid: 0825a7edb750755478eedd610ccd505b, type: 3}
+    volumeScale: 0.85
+  sfxHitHeavy:
+    clip: {fileID: 8300000, guid: e8dd344c656009a41885c81e29ed87d9, type: 3}
+    volumeScale: 0.95
+  sfxBlock:
+    clip: {fileID: 8300000, guid: 64c9f3e2495c0dd48941cf540e8a4662, type: 3}
+    volumeScale: 0.8
+  sfxSpecialLaunch:
+    clip: {fileID: 8300000, guid: 347d773d1b2baa94d933927a5d004e96, type: 3}
+    volumeScale: 0.9
+  sfxSpecialImpact:
+    clip: {fileID: 8300000, guid: a1f94c91a7b9bb840845a4531de0e43c, type: 3}
+    volumeScale: 0.95
+  sfxJump:
+    clip: {fileID: 8300000, guid: bdb8cabb0f98fb7439d2ea38d72de9fa, type: 3}
+    volumeScale: 0.26
+  sfxLand:
+    clip: {fileID: 8300000, guid: cccb3cda228782b49baf0e7d7ba62b01, type: 3}
+    volumeScale: 0.5
+  sfxBellKo:
+    clip: {fileID: 8300000, guid: 904348e74c75dd6468fef8cab7827c85, type: 3}
+    volumeScale: 0.95
+  sfxVictory:
+    clip: {fileID: 8300000, guid: e6591c22075998c48afb996cbacd7259, type: 3}
+    volumeScale: 0.85
+  sfxDefeat:
+    clip: {fileID: 8300000, guid: 6b595776f044a8d4a8e092948374f367, type: 3}
+    volumeScale: 0.85
+  voRound1:
+    clip: {fileID: 8300000, guid: 7ae1a21004ea647438a10784ff3d797c, type: 3}
+    volumeScale: 1
+  voRound2:
+    clip: {fileID: 8300000, guid: bf66dd037b1ce3847996a5f1ea2a8b1b, type: 3}
+    volumeScale: 1
+  voFinalRound:
+    clip: {fileID: 8300000, guid: 5b9ee74df0d524d4194a0a99df5bfcef, type: 3}
+    volumeScale: 1
+  voFight:
+    clip: {fileID: 8300000, guid: cffc2bc3e2ebf554080bf42574ed62c1, type: 3}
+    volumeScale: 1
+  voKo:
+    clip: {fileID: 8300000, guid: 98c105f955bb28649a0dc42eb12e5485, type: 3}
+    volumeScale: 1
+  voVictory:
+    clip: {fileID: 8300000, guid: 482fe59fd21d3114a9f1961d96af0c1c, type: 3}
+    volumeScale: 1
+  voDefeat:
+    clip: {fileID: 8300000, guid: 8f6047b5f2f8ccd44954160beac383d0, type: 3}
+    volumeScale: 1

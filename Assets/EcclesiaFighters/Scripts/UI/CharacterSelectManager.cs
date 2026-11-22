@@ -252,6 +252,7 @@ namespace EcclesiaFighters
         public void OnConfirm()
         {
             if (selectedA < 0 || selectedB < 0) return;
+            AudioManager.PlayUIConfirm();
             PlayerPrefs.SetInt("SelectedCharA", selectedA);
             PlayerPrefs.SetInt("SelectedCharB", selectedB);
             PlayerPrefs.SetInt("P1IsAI", p1IsAI ? 1 : 0);
@@ -275,6 +276,7 @@ namespace EcclesiaFighters
 
         public void OnBack()
         {
+            AudioManager.PlayUIBack();
             if (titleManager) titleManager.ReturnToTitle();
             else SceneManager.LoadScene(backScene);
         }

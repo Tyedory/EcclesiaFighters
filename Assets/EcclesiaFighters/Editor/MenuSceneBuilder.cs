@@ -143,13 +143,9 @@ namespace EcclesiaFighters.EditorTools
             Scene scene = OpenScene("TitleScreen");
             ClearGenerated(scene);
             SetupCamera();
+            // BGM is managed persistently by AudioManager (no standalone scene BGM AudioSource)
             var mgr = GetOrCreateManager<TitleScreenManager>("TitleScreenManager");
             RectTransform root = CreateCanvas();
-
-            // ── BGM source (TitleScreenManager.bgmSource) ──
-            var bgmGo = new GameObject("BGM");
-            var bgm = bgmGo.AddComponent<AudioSource>();
-            bgm.playOnAwake = false; bgm.loop = true; bgm.spatialBlend = 0f;
 
             // ── Title panel ──
             RectTransform titlePanel = NewRect("TitlePanel", root); Stretch(titlePanel);
@@ -232,7 +228,7 @@ namespace EcclesiaFighters.EditorTools
             mgr.lightningFlash  = flash;
             mgr.titleLogoGroup  = logoGroup;
             mgr.menuGroup       = menuGroup;
-            mgr.bgmSource       = bgm;
+            mgr.bgmSource       = null;
             mgr.bgmTitleClip    = LoadClip("BGM_TitleScreen.mp3");
             mgr.bgmCharClip     = LoadClip("BGM_CharSelect_JesuJoy.mp3");
             mgr.menuButtons     = buttons;
@@ -591,7 +587,6 @@ namespace EcclesiaFighters.EditorTools
             SetupCamera();
             var mgr = GetOrCreateManager<CharacterSelectManager>("CharacterSelectManager");
             RectTransform root = CreateCanvas();
-            AddBgm(AudioDir + "BGM_CharSelect_JesuJoy.mp3");
 
             Image bg = AddImage(root, "Background", Color.white, LoadSprite("Backgrounds/BG_CharSelect.jpg"), false);
             Stretch(bg.rectTransform);
@@ -772,7 +767,6 @@ namespace EcclesiaFighters.EditorTools
             SetupCamera();
             var mgr = GetOrCreateManager<MapSelectManager>("MapSelectManager");
             RectTransform root = CreateCanvas();
-            AddBgm(AudioDir + "BGM_CharSelect_JesuJoy.mp3");
 
             Image bg = AddImage(root, "Background", Color.white, LoadSprite("Backgrounds/BG_CharSelect_Dark.jpg"), false);
             Stretch(bg.rectTransform);

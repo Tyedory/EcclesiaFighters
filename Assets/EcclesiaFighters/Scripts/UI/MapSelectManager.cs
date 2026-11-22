@@ -68,6 +68,7 @@ namespace EcclesiaFighters
 
         public void SelectExterior()
         {
+            AudioManager.PlayUIClick();
             selectedMap = MapID.Exterior;
             mapChosen = true;
             goBtn.interactable = true;
@@ -76,6 +77,7 @@ namespace EcclesiaFighters
 
         public void SelectInterior()
         {
+            AudioManager.PlayUIClick();
             selectedMap = MapID.Interior;
             mapChosen = true;
             goBtn.interactable = true;
@@ -104,6 +106,7 @@ namespace EcclesiaFighters
         public void OnConfirm()
         {
             if (!mapChosen) return;
+            AudioManager.PlayUIConfirm();
             PlayerPrefs.SetString("SelectedMap", selectedMap.ToString());
             PlayerPrefs.Save();
             StartCoroutine(FightIntro());
@@ -126,6 +129,7 @@ namespace EcclesiaFighters
 
         public void OnBack()
         {
+            AudioManager.PlayUIBack();
             if (titleManager) titleManager.ReturnToCharSel();
             else SceneManager.LoadScene(backScene);
         }
