@@ -58,24 +58,24 @@ namespace EcclesiaFighters
                 float damage, float startup, float active, float recovery, float cooldown,
                 float range, Vector3 hitHalfExtents, float knockback, float hitstun)
             {
-                this.damage         = damage;
-                this.startup        = startup;
-                this.active         = active;
-                this.recovery       = recovery;
-                this.cooldown       = cooldown;
-                this.range          = range;
+                this.damage = damage;
+                this.startup = startup;
+                this.active = active;
+                this.recovery = recovery;
+                this.cooldown = cooldown;
+                this.range = range;
                 this.hitHalfExtents = hitHalfExtents;
-                this.knockback      = knockback;
-                this.hitstun        = hitstun;
+                this.knockback = knockback;
+                this.hitstun = hitstun;
             }
         }
 
         // ── Identity ──────────────────────────────────────────
         [Header("Identity")]
-        public string characterName      = "Fighter";
-        public int    playerIndex        = 0;
+        public string characterName = "Fighter";
+        public int playerIndex = 0;
         [FormerlySerializedAs("isPlayer")]
-        public bool   isPlayerControlled = true;
+        public bool isPlayerControlled = true;
 
         /// <summary>Backwards-compatible alias for isPlayerControlled.</summary>
         public bool isPlayer
@@ -86,30 +86,33 @@ namespace EcclesiaFighters
 
         // ── Stats & Movement ──────────────────────────────────
         [Header("Stats & Movement")]
-        public float maxHP                   = 100f;
-        public float moveSpeed               = 4.5f;
+        public float maxHP = 100f;
+        public float moveSpeed = 4.5f;
         [Range(0.3f, 1f)] public float backWalkSpeedMultiplier = 0.82f;
-        public float doubleTapWindow         = 0.28f;
+        public float doubleTapWindow = 0.28f;
         public float sprintForwardMultiplier = 1.75f;
         public float sprintRetreatMultiplier = 1.45f;
+        public float sprintJumpAirMultiplier = 1.60f;
+        public float minBodySpacing = 0.68f;
+        public float bodyOverlapHeightThreshold = 1.35f;
         [Range(0.2f, 0.9f)] public float crouchSpeedMultiplier = 0.45f;
-        [Range(0.4f, 0.85f)] public float crouchHeightRatio    = 0.60f;
-        public float jumpForce               = 11.2f;
+        [Range(0.4f, 0.85f)] public float crouchHeightRatio = 0.60f;
+        public float jumpForce = 11.2f;
         public float ascentGravityMultiplier = 2.2f;
-        public float fallGravityMultiplier   = 3.0f;
-        public float blockReduction          = 0.15f;   // blocked hit = 15% chip damage
-        public float blockKnockbackScale     = 0.35f;
-        public float knockbackDamping        = 18f;
+        public float fallGravityMultiplier = 3.0f;
+        public float blockReduction = 0.15f;   // blocked hit = 15% chip damage
+        public float blockKnockbackScale = 0.35f;
+        public float knockbackDamping = 18f;
         public float invulnerabilityDuration = 0.22f;
 
         [Header("Stage Bounds")]
         public float stageMinX = -8.5f;
-        public float stageMaxX =  8.5f;
+        public float stageMaxX = 8.5f;
 
         // ── Attacks ───────────────────────────────────────────
         [Header("Melee Moves")]
         public AttackConfig lightPunch = new AttackConfig(
-            8f,  0.07f, 0.09f, 0.14f, 0.08f, 0.52f, new Vector3(0.32f, 0.36f, 0.60f), 2.2f, 0.18f);
+            8f, 0.07f, 0.09f, 0.14f, 0.08f, 0.52f, new Vector3(0.32f, 0.36f, 0.60f), 2.2f, 0.18f);
         public AttackConfig heavyPunch = new AttackConfig(
             15f, 0.16f, 0.12f, 0.26f, 0.18f, 0.62f, new Vector3(0.37f, 0.38f, 0.60f), 5.0f, 0.32f);
         public AttackConfig kick = new AttackConfig(
@@ -121,15 +124,15 @@ namespace EcclesiaFighters
 
         // ── Special projectile ────────────────────────────────
         [Header("Special")]
-        public float specialDamage    = 28f;
-        public float specialCooldown  = 5f;
-        public float specialStartup   = 0.16f;
-        public float specialActive    = 0.10f;
-        public float specialRecovery  = 0.24f;
-        public float specialSpeed     = 16f;
+        public float specialDamage = 28f;
+        public float specialCooldown = 5f;
+        public float specialStartup = 0.16f;
+        public float specialActive = 0.10f;
+        public float specialRecovery = 0.24f;
+        public float specialSpeed = 16f;
         public GameObject specialPrefab;
         [Tooltip("Spawn origin of the special. If empty, a 'FirePoint' child is created at chest height on first use.")]
-        public Transform  firePoint;
+        public Transform firePoint;
         [Range(0f, 1f)] public float chestHeightRatio = 0.7f;
         public float fallbackChestHeight = 1.3f;
         public float muzzleForwardOffset = 0.55f;
@@ -140,27 +143,27 @@ namespace EcclesiaFighters
         [Tooltip("Seconds from Heavy Punch input until hitbox activates when animated.")]
         public float heavyPunchStartup = 0.25f;
         [Tooltip("Seconds from Kick input until hitbox activates when animated.")]
-        public float kickStartup       = 0.24f;
+        public float kickStartup = 0.24f;
         [Tooltip("Seconds from Special input until projectile spawns at throw release when animated.")]
         public float specialSpawnDelay = 0.37f;
 
         // ── Controls (Player 1 defaults) ──────────────────────
         [Header("Controls — ignored when isPlayerControlled=false")]
-        public KeyCode keyLeft       = KeyCode.A;
-        public KeyCode keyRight      = KeyCode.D;
-        public KeyCode keyJump       = KeyCode.W;
-        public KeyCode keyJumpAlt    = KeyCode.Space;
-        public KeyCode keyCrouch     = KeyCode.S;
-        public KeyCode keyBlock      = KeyCode.LeftShift;
+        public KeyCode keyLeft = KeyCode.A;
+        public KeyCode keyRight = KeyCode.D;
+        public KeyCode keyJump = KeyCode.W;
+        public KeyCode keyJumpAlt = KeyCode.Space;
+        public KeyCode keyCrouch = KeyCode.S;
+        public KeyCode keyBlock = KeyCode.LeftShift;
         public KeyCode keyLightPunch = KeyCode.J;
         public KeyCode keyHeavyPunch = KeyCode.K;
-        public KeyCode keyKick       = KeyCode.L;
-        public KeyCode keySpecial1   = KeyCode.U;
-        public KeyCode keySpecial2   = KeyCode.I;
+        public KeyCode keyKick = KeyCode.L;
+        public KeyCode keySpecial1 = KeyCode.U;
+        public KeyCode keySpecial2 = KeyCode.I;
 
         // ── Placeholder Visual Feedback ───────────────────────
         [Header("Placeholder Visuals (Pre-Animation Testing)")]
-        public bool      usePlaceholderVisuals = true;
+        public bool usePlaceholderVisuals = true;
         public Transform visualRoot;
 
         // ── Dev / Training Flags ──────────────────────────────
@@ -170,53 +173,53 @@ namespace EcclesiaFighters
 
         // ── References ────────────────────────────────────────
         [HideInInspector] public Transform opponent;
-        [HideInInspector] public Slider    hpBar;
-        [HideInInspector] public Action    OnKO;
+        [HideInInspector] public Slider hpBar;
+        [HideInInspector] public Action OnKO;
 
         // ── Public state (read by FighterAI & HUD) ────────────
-        public float      CurrentHP             => hp;
-        public float      HPRatio               => maxHP > 0f ? Mathf.Clamp01(hp / maxHP) : 0f;
-        public bool       IsGrounded            => grounded;
-        public bool       IsBlocking            => blocking;
-        public bool       IsCrouching           => crouching;
-        public bool       IsAttacking           => isAttacking;
-        public bool       IsInHitstun           => hitstunTimer > 0f;
-        public bool       InputEnabled          => inputEnabled;
-        public AttackType CurrentAttack         => currentAttack;
-        public bool       SpecialReady          => spCooldown <= 0f;
-        public bool       IsDead                => dead;
-        public bool       IsSprinting           => sprinting;
-        public bool       DevCrouchActive       => devForceCrouch;
-        public bool       DevBlockActive        => devForceBlock;
-        public bool       HasAnimatorController => animReady;
+        public float CurrentHP => hp;
+        public float HPRatio => maxHP > 0f ? Mathf.Clamp01(hp / maxHP) : 0f;
+        public bool IsGrounded => grounded;
+        public bool IsBlocking => blocking;
+        public bool IsCrouching => crouching;
+        public bool IsAttacking => isAttacking;
+        public bool IsInHitstun => hitstunTimer > 0f;
+        public bool InputEnabled => inputEnabled;
+        public AttackType CurrentAttack => currentAttack;
+        public bool SpecialReady => spCooldown <= 0f;
+        public bool IsDead => dead;
+        public bool IsSprinting => sprinting;
+        public bool DevCrouchActive => devForceCrouch;
+        public bool DevBlockActive => devForceBlock;
+        public bool HasAnimatorController => animReady;
 
         /// <summary>+1 = facing right (+X), -1 = facing left (-X). Derived from transform so it cannot desync.</summary>
         public int FacingDir => facingMode == FacingMode.FlipScaleX
             ? (transform.localScale.x >= 0f ? 1 : -1)
-            : (transform.forward.x   >= 0f ? 1 : -1);
+            : (transform.forward.x >= 0f ? 1 : -1);
 
         /// <summary>World-space unit vector the fighter is facing (always along X).</summary>
         public Vector3 FacingVector => new Vector3(FacingDir, 0f, 0f);
 
         // ── Animator hashes ───────────────────────────────────
-        static readonly int HashIdle        = Animator.StringToHash("Idle");
-        static readonly int HashWalking     = Animator.StringToHash("Walking");
+        static readonly int HashIdle = Animator.StringToHash("Idle");
+        static readonly int HashWalking = Animator.StringToHash("Walking");
         static readonly int HashWalkingBack = Animator.StringToHash("WalkingBack");
-        static readonly int HashRunning     = Animator.StringToHash("Running");
+        static readonly int HashRunning = Animator.StringToHash("Running");
         static readonly int HashRunningBack = Animator.StringToHash("RunningBack");
-        static readonly int HashCrouching   = Animator.StringToHash("Crouching");
-        static readonly int HashBlocking    = Animator.StringToHash("Blocking");
-        static readonly int HashIsGrounded  = Animator.StringToHash("IsGrounded");
-        static readonly int HashJump        = Animator.StringToHash("Jump");
-        static readonly int HashLightPunch  = Animator.StringToHash("LightPunch");
-        static readonly int HashHeavyPunch  = Animator.StringToHash("HeavyPunch");
-        static readonly int HashPunch       = Animator.StringToHash("Punch");
-        static readonly int HashKick        = Animator.StringToHash("Kick");
-        static readonly int HashSpecial     = Animator.StringToHash("Special");
-        static readonly int HashHit         = Animator.StringToHash("Hit");
-        static readonly int HashDeath       = Animator.StringToHash("Death");
+        static readonly int HashCrouching = Animator.StringToHash("Crouching");
+        static readonly int HashBlocking = Animator.StringToHash("Blocking");
+        static readonly int HashIsGrounded = Animator.StringToHash("IsGrounded");
+        static readonly int HashJump = Animator.StringToHash("Jump");
+        static readonly int HashLightPunch = Animator.StringToHash("LightPunch");
+        static readonly int HashHeavyPunch = Animator.StringToHash("HeavyPunch");
+        static readonly int HashPunch = Animator.StringToHash("Punch");
+        static readonly int HashKick = Animator.StringToHash("Kick");
+        static readonly int HashSpecial = Animator.StringToHash("Special");
+        static readonly int HashHit = Animator.StringToHash("Hit");
+        static readonly int HashDeath = Animator.StringToHash("Death");
 
-        static readonly int ShaderColorId     = Shader.PropertyToID("_Color");
+        static readonly int ShaderColorId = Shader.PropertyToID("_Color");
         static readonly int ShaderBaseColorId = Shader.PropertyToID("_BaseColor");
 
         static Material sharedHitIndicatorMat;
@@ -232,8 +235,8 @@ namespace EcclesiaFighters
         bool hasBeenAirborne;
         float lastSpawnOrResetTime, lastLandSfxTime = -10f;
         bool walkingForward, walkingBackward;
-        bool sprinting, runningForward, runningBackward;
-        int  sprintInputDir, lastTappedDir;
+        bool sprinting, isSprintJump, runningForward, runningBackward;
+        int sprintInputDir, lastTappedDir;
         float lastLeftTapTime = -10f, lastRightTapTime = -10f;
         bool holdingAway, aiWantsBlock, aiWantsCrouch;
         bool devForceCrouch, devForceBlock, devWalkJustEnded;
@@ -241,34 +244,34 @@ namespace EcclesiaFighters
         int devWalkRelDir;
         bool isAttacking;
 
-        AttackType  currentAttack = AttackType.None;
-        AttackPhase attackPhase   = AttackPhase.None;
-        float       attackPhaseT;
-        Coroutine   attackRoutine;
+        AttackType currentAttack = AttackType.None;
+        AttackPhase attackPhase = AttackPhase.None;
+        float attackPhaseT;
+        Coroutine attackRoutine;
 
-        Rigidbody         rb;
-        Animator          anim;
-        CapsuleCollider   capsule;
+        Rigidbody rb;
+        Animator anim;
+        CapsuleCollider capsule;
         FighterController cachedOpponentCtrl;
 
-        float   origColliderHeight = 1.93f;
+        float origColliderHeight = 1.93f;
         Vector3 origColliderCenter = Vector3.zero;
-        float   bottomLocalY       = -0.965f;
+        float bottomLocalY = -0.965f;
 
         // ── Visual feedback cache ─────────────────────────────
-        Vector3    baseVisualLocalPos;
+        Vector3 baseVisualLocalPos;
         Quaternion baseVisualLocalRot;
-        Vector3    baseVisualLocalScale;
-        Vector3    visualUpWeights = Vector3.up;
-        bool       hasVisualRoot;
-        bool       placeholderWasActive;
+        Vector3 baseVisualLocalScale;
+        Vector3 visualUpWeights = Vector3.up;
+        bool hasVisualRoot;
+        bool placeholderWasActive;
 
-        Renderer[]            cachedRenderers;
-        Color[]               baseRendererColors;
+        Renderer[] cachedRenderers;
+        Color[] baseRendererColors;
         MaterialPropertyBlock propBlock;
-        float                 currentVisualSquash = 1f;
-        float                 currentVisualTilt;
-        float                 currentVisualLunge;
+        float currentVisualSquash = 1f;
+        float currentVisualTilt;
+        float currentVisualLunge;
 
         // ── Animator cache ────────────────────────────────────
         readonly Dictionary<int, AnimatorControllerParameterType> animParams =
@@ -280,11 +283,12 @@ namespace EcclesiaFighters
         // ══════════════════════════════════════════════════════
         void Awake()
         {
-            rb      = GetComponent<Rigidbody>();
-            anim    = GetComponent<Animator>();
+            rb = GetComponent<Rigidbody>();
+            anim = GetComponent<Animator>();
             capsule = GetComponent<CapsuleCollider>();
 
             rb.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionZ;
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             stageZ = transform.position.z;
             baseMaxHP = Mathf.Max(1f, maxHP);
             lastSpawnOrResetTime = Time.time;
@@ -293,7 +297,7 @@ namespace EcclesiaFighters
             {
                 origColliderHeight = capsule.height;
                 origColliderCenter = capsule.center;
-                bottomLocalY       = origColliderCenter.y - origColliderHeight * 0.5f;
+                bottomLocalY = origColliderCenter.y - origColliderHeight * 0.5f;
             }
 
             ApplyArcadeCombatTuning();
@@ -306,21 +310,21 @@ namespace EcclesiaFighters
             // Upgrade legacy serialized prefab values to snappy arcade jump & tighter melee hitboxes
             if (jumpForce < 9.5f) jumpForce = 11.2f;
             if (ascentGravityMultiplier < 1.1f) ascentGravityMultiplier = 2.2f;
-            if (fallGravityMultiplier   < 1.1f) fallGravityMultiplier   = 3.0f;
+            if (fallGravityMultiplier < 1.1f) fallGravityMultiplier = 3.0f;
 
             if (lightPunch.hitHalfExtents.x > 0.45f || lightPunch.range > 0.70f)
             {
-                lightPunch.range          = 0.52f;
+                lightPunch.range = 0.52f;
                 lightPunch.hitHalfExtents = new Vector3(0.32f, 0.36f, 0.60f);
             }
             if (heavyPunch.hitHalfExtents.x > 0.50f || heavyPunch.range > 0.82f)
             {
-                heavyPunch.range          = 0.62f;
+                heavyPunch.range = 0.62f;
                 heavyPunch.hitHalfExtents = new Vector3(0.37f, 0.38f, 0.60f);
             }
             if (kick.hitHalfExtents.x > 0.55f || kick.range > 0.95f)
             {
-                kick.range          = 0.72f;
+                kick.range = 0.72f;
                 kick.hitHalfExtents = new Vector3(0.42f, 0.38f, 0.60f);
             }
         }
@@ -331,28 +335,29 @@ namespace EcclesiaFighters
         {
             StopActiveAttack();
 
-            hp                  = maxHP;
-            spCooldown          = 0f;
+            hp = maxHP;
+            spCooldown = 0f;
             attackCooldownTimer = 0f;
-            hitstunTimer        = 0f;
-            invulnTimer         = 0f;
-            hitFlashTimer       = 0f;
-            blockFlashTimer     = 0f;
-            jumpGraceTimer      = 0f;
-            dead                 = false;
-            grounded             = true;
-            hasBeenAirborne      = false;
+            hitstunTimer = 0f;
+            invulnTimer = 0f;
+            hitFlashTimer = 0f;
+            blockFlashTimer = 0f;
+            jumpGraceTimer = 0f;
+            dead = false;
+            grounded = true;
+            hasBeenAirborne = false;
             lastSpawnOrResetTime = Time.time;
-            holdingAway         = false;
-            aiWantsBlock        = false;
-            aiWantsCrouch       = false;
-            devForceCrouch      = false;
-            devForceBlock       = false;
-            devWalkJustEnded    = false;
-            devWalkTimer        = 0f;
+            holdingAway = false;
+            aiWantsBlock = false;
+            aiWantsCrouch = false;
+            devForceCrouch = false;
+            devForceBlock = false;
+            devWalkJustEnded = false;
+            devWalkTimer = 0f;
 
             if (rb) rb.velocity = Vector3.zero;
 
+            isSprintJump = false;
             StopSprint();
             SetWalking(false, false);
             SetCrouching(false);
@@ -364,7 +369,7 @@ namespace EcclesiaFighters
             {
                 hpBar.minValue = 0f;
                 hpBar.maxValue = 1f;
-                hpBar.value    = 1f;
+                hpBar.value = 1f;
             }
             ResetAnimator();
         }
@@ -374,12 +379,12 @@ namespace EcclesiaFighters
         {
             if (baseMaxHP <= 0f) baseMaxHP = Mathf.Max(1f, maxHP);
             maxHP = Mathf.Max(1f, Mathf.Round(baseMaxHP * Mathf.Clamp(multiplier, 0.25f, 5f)));
-            hp    = maxHP;
+            hp = maxHP;
             if (hpBar != null)
             {
                 hpBar.minValue = 0f;
                 hpBar.maxValue = 1f;
-                hpBar.value    = 1f;
+                hpBar.value = 1f;
             }
         }
 
@@ -388,13 +393,14 @@ namespace EcclesiaFighters
             inputEnabled = v;
             if (!v)
             {
-                holdingAway      = false;
-                aiWantsBlock     = false;
-                aiWantsCrouch    = false;
-                devForceCrouch   = false;
-                devForceBlock    = false;
+                holdingAway = false;
+                aiWantsBlock = false;
+                aiWantsCrouch = false;
+                devForceCrouch = false;
+                devForceBlock = false;
                 devWalkJustEnded = false;
-                devWalkTimer     = 0f;
+                devWalkTimer = 0f;
+                isSprintJump = false;
                 StopSprint();
                 SetWalking(false, false);
                 SetCrouching(false);
@@ -411,9 +417,9 @@ namespace EcclesiaFighters
         {
             if (slotIndex >= 0) playerIndex = slotIndex;
             isPlayerControlled = playerControlled;
-            aiWantsBlock       = false;
-            aiWantsCrouch      = false;
-            holdingAway        = false;
+            aiWantsBlock = false;
+            aiWantsCrouch = false;
+            holdingAway = false;
             SetWalking(false, false);
             SetCrouching(false);
             SetBlocking(false);
@@ -493,9 +499,9 @@ namespace EcclesiaFighters
 
         public void AILightPunch() { if (!isPlayerControlled) TryStartMelee(AttackType.LightPunch); }
         public void AIHeavyPunch() { if (!isPlayerControlled) TryStartMelee(AttackType.HeavyPunch); }
-        public void AIPunch()      { if (!isPlayerControlled) TryStartMelee(AttackType.LightPunch); }
-        public void AIKick()       { if (!isPlayerControlled) TryStartMelee(AttackType.Kick); }
-        public void AISpecial()    { if (!isPlayerControlled) TryStartSpecial(); }
+        public void AIPunch() { if (!isPlayerControlled) TryStartMelee(AttackType.LightPunch); }
+        public void AIKick() { if (!isPlayerControlled) TryStartMelee(AttackType.Kick); }
+        public void AISpecial() { if (!isPlayerControlled) TryStartSpecial(); }
 
         public void AISetBlock(bool v)
         {
@@ -529,19 +535,19 @@ namespace EcclesiaFighters
             if (Time.timeScale <= 0f || FightOverlayController.IsPaused) return;
 
             float dt = Time.deltaTime;
-            if (spCooldown          > 0f) spCooldown          -= dt;
+            if (spCooldown > 0f) spCooldown -= dt;
             if (attackCooldownTimer > 0f) attackCooldownTimer -= dt;
-            if (invulnTimer         > 0f) invulnTimer         -= dt;
-            if (hitFlashTimer       > 0f) hitFlashTimer       -= dt;
-            if (blockFlashTimer     > 0f) blockFlashTimer     -= dt;
-            if (jumpGraceTimer      > 0f) jumpGraceTimer      -= dt;
+            if (invulnTimer > 0f) invulnTimer -= dt;
+            if (hitFlashTimer > 0f) hitFlashTimer -= dt;
+            if (blockFlashTimer > 0f) blockFlashTimer -= dt;
+            if (jumpGraceTimer > 0f) jumpGraceTimer -= dt;
 
             if (devWalkTimer > 0f)
             {
                 devWalkTimer -= dt;
                 if (devWalkTimer <= 0f)
                 {
-                    devWalkTimer     = 0f;
+                    devWalkTimer = 0f;
                     devWalkJustEnded = true;
                 }
             }
@@ -639,7 +645,7 @@ namespace EcclesiaFighters
 
             if (hitstunTimer > 0f)
             {
-                holdingAway      = false;
+                holdingAway = false;
                 devWalkJustEnded = false;
                 StopSprint();
                 SetWalking(false, false);
@@ -648,15 +654,15 @@ namespace EcclesiaFighters
                 return;
             }
 
-            KeyCode kLeft       = KeybindManager.GetKey(playerIndex, FighterAction.MoveLeft);
-            KeyCode kRight      = KeybindManager.GetKey(playerIndex, FighterAction.MoveRight);
-            KeyCode kJump       = KeybindManager.GetKey(playerIndex, FighterAction.Jump);
-            KeyCode kCrouch     = KeybindManager.GetKey(playerIndex, FighterAction.Crouch);
-            KeyCode kBlock      = KeybindManager.GetKey(playerIndex, FighterAction.Block);
+            KeyCode kLeft = KeybindManager.GetKey(playerIndex, FighterAction.MoveLeft);
+            KeyCode kRight = KeybindManager.GetKey(playerIndex, FighterAction.MoveRight);
+            KeyCode kJump = KeybindManager.GetKey(playerIndex, FighterAction.Jump);
+            KeyCode kCrouch = KeybindManager.GetKey(playerIndex, FighterAction.Crouch);
+            KeyCode kBlock = KeybindManager.GetKey(playerIndex, FighterAction.Block);
             KeyCode kLightPunch = KeybindManager.GetKey(playerIndex, FighterAction.LightPunch);
             KeyCode kHeavyPunch = KeybindManager.GetKey(playerIndex, FighterAction.HeavyPunch);
-            KeyCode kKick       = KeybindManager.GetKey(playerIndex, FighterAction.Kick);
-            KeyCode kSpecial    = KeybindManager.GetKey(playerIndex, FighterAction.Special);
+            KeyCode kKick = KeybindManager.GetKey(playerIndex, FighterAction.Kick);
+            KeyCode kSpecial = KeybindManager.GetKey(playerIndex, FighterAction.Special);
 
             if (Input.GetKeyDown(kCrouch) || Input.GetKeyDown(kJump))
                 devForceCrouch = false;
@@ -666,17 +672,17 @@ namespace EcclesiaFighters
 
             // Read directional & posture inputs via KeybindManager (isolated per playerIndex)
             float dir = 0f;
-            if (Input.GetKey(kLeft))  dir -= 1f;
+            if (Input.GetKey(kLeft)) dir -= 1f;
             if (Input.GetKey(kRight)) dir += 1f;
 
             bool crouchHeld = (Input.GetKey(kCrouch) || devForceCrouch) && grounded;
-            bool shiftBlock = (Input.GetKey(kBlock)  || devForceBlock)  && grounded;
+            bool shiftBlock = (Input.GetKey(kBlock) || devForceBlock) && grounded;
 
             if (Input.GetKeyDown(kLeft))
             {
                 if ((Time.time - lastLeftTapTime) <= doubleTapWindow && lastTappedDir == -1 && grounded && !crouchHeld && !shiftBlock)
                 {
-                    sprinting      = true;
+                    sprinting = true;
                     sprintInputDir = -1;
                 }
                 else if (sprinting && sprintInputDir != -1)
@@ -684,13 +690,13 @@ namespace EcclesiaFighters
                     StopSprint();
                 }
                 lastLeftTapTime = Time.time;
-                lastTappedDir   = -1;
+                lastTappedDir = -1;
             }
             if (Input.GetKeyDown(kRight))
             {
                 if ((Time.time - lastRightTapTime) <= doubleTapWindow && lastTappedDir == 1 && grounded && !crouchHeld && !shiftBlock)
                 {
-                    sprinting      = true;
+                    sprinting = true;
                     sprintInputDir = 1;
                 }
                 else if (sprinting && sprintInputDir != 1)
@@ -698,20 +704,20 @@ namespace EcclesiaFighters
                     StopSprint();
                 }
                 lastRightTapTime = Time.time;
-                lastTappedDir    = 1;
+                lastTappedDir = 1;
             }
 
             if (sprinting)
             {
                 bool heldMatchingDir = (sprintInputDir == -1 && Input.GetKey(kLeft) && dir < -0.5f)
-                                    || (sprintInputDir ==  1 && Input.GetKey(kRight) && dir > 0.5f);
+                                    || (sprintInputDir == 1 && Input.GetKey(kRight) && dir > 0.5f);
                 if (!heldMatchingDir || !grounded || crouchHeld || shiftBlock || isAttacking)
                     StopSprint();
             }
 
             if (!Mathf.Approximately(dir, 0f))
             {
-                devWalkTimer     = 0f;
+                devWalkTimer = 0f;
                 devWalkJustEnded = false;
             }
             else if (devWalkTimer > 0f)
@@ -727,10 +733,10 @@ namespace EcclesiaFighters
             // Attacks take priority when ready (allow crisp sprint-to-attack cancel)
             if (!isAttacking && attackCooldownTimer <= 0f)
             {
-                if (Input.GetKeyDown(kSpecial))    { if (TryStartSpecial()) return; }
+                if (Input.GetKeyDown(kSpecial)) { if (TryStartSpecial()) return; }
                 if (Input.GetKeyDown(kLightPunch)) { TryStartMelee(AttackType.LightPunch); return; }
                 if (Input.GetKeyDown(kHeavyPunch)) { TryStartMelee(AttackType.HeavyPunch); return; }
-                if (Input.GetKeyDown(kKick))       { TryStartMelee(AttackType.Kick);       return; }
+                if (Input.GetKeyDown(kKick)) { TryStartMelee(AttackType.Kick); return; }
             }
 
             if (isAttacking)
@@ -743,7 +749,7 @@ namespace EcclesiaFighters
             }
 
             bool autoAwayBlock = !sprinting && holdingAway && IsThreatApproaching();
-            bool blockActive   = shiftBlock || autoAwayBlock;
+            bool blockActive = shiftBlock || autoAwayBlock;
             if (blockActive) StopSprint();
             SetBlocking(blockActive);
 
@@ -787,10 +793,11 @@ namespace EcclesiaFighters
             if (Mathf.Approximately(dir, 0f)) { StopSprint(); SetWalking(false, false); return; }
 
             float speed = moveSpeed;
-            bool isForward    = (dir * FacingDir) > 0f;
+            bool isForward = (dir * FacingDir) > 0f;
             bool activeSprint = sprinting && grounded && !crouching && !blocking;
-            if (crouching)       speed *= crouchSpeedMultiplier;
+            if (crouching) speed *= crouchSpeedMultiplier;
             else if (activeSprint) speed *= isForward ? sprintForwardMultiplier : sprintRetreatMultiplier;
+            else if (!grounded && isSprintJump) speed *= sprintJumpAirMultiplier;
             else if (!isForward) speed *= backWalkSpeedMultiplier;
 
             transform.Translate(Vector3.right * dir * speed * Time.deltaTime, Space.World);
@@ -822,13 +829,82 @@ namespace EcclesiaFighters
             p.x = Mathf.Clamp(p.x, stageMinX, stageMaxX);
             p.z = stageZ;
             transform.position = p;
+
+            ResolveOpponentBodyOverlap();
+        }
+
+        /// <summary>
+        /// Anti-phasing pushbox guard: when two living fighters vertically overlap (grounded or low jump),
+        /// enforces minBodySpacing along X and clears inward horizontal velocities so high-speed sprinting cannot pass through.
+        /// Jumping high above (vertical delta >= bodyOverlapHeightThreshold) still clears cleanly.
+        /// </summary>
+        void ResolveOpponentBodyOverlap()
+        {
+            FighterController opp = GetOpponentController();
+            if (opp == null || dead || opp.IsDead || minBodySpacing <= 0f) return;
+
+            Vector3 myPos = transform.position;
+            Vector3 oppPos = opp.transform.position;
+
+            if (Mathf.Abs(myPos.y - oppPos.y) >= bodyOverlapHeightThreshold) return;
+
+            float dx = myPos.x - oppPos.x;
+            float dist = Mathf.Abs(dx);
+            if (dist >= minBodySpacing) return;
+
+            float sign;
+            if (dist > 0.001f)
+                sign = dx >= 0f ? 1f : -1f;
+            else
+                sign = playerIndex == 0 ? -1f : 1f;
+
+            float halfPush = (minBodySpacing - dist) * 0.5f;
+            float myX = Mathf.Clamp(myPos.x + sign * halfPush, stageMinX, stageMaxX);
+            float oppX = Mathf.Clamp(oppPos.x - sign * halfPush, opp.stageMinX, opp.stageMaxX);
+
+            // If one fighter is pinned against a stage wall, shift the remaining separation onto the unpinned fighter
+            float remaining = minBodySpacing - Mathf.Abs(myX - oppX);
+            if (remaining > 0.0005f)
+            {
+                float shiftedMy = Mathf.Clamp(myX + sign * remaining, stageMinX, stageMaxX);
+                remaining -= Mathf.Abs(shiftedMy - myX);
+                myX = shiftedMy;
+
+                if (remaining > 0.0005f)
+                    oppX = Mathf.Clamp(oppX - sign * remaining, opp.stageMinX, opp.stageMaxX);
+            }
+
+            myPos.x = myX;
+            oppPos.x = oppX;
+            transform.position = myPos;
+            opp.transform.position = oppPos;
+
+            if (rb != null)
+            {
+                Vector3 v = rb.velocity;
+                if (v.x * (-sign) > 0f)
+                {
+                    v.x = 0f;
+                    rb.velocity = v;
+                }
+            }
+            if (opp.rb != null)
+            {
+                Vector3 ov = opp.rb.velocity;
+                if (ov.x * sign > 0f)
+                {
+                    ov.x = 0f;
+                    opp.rb.velocity = ov;
+                }
+            }
         }
 
         void DoJump()
         {
-            grounded        = false;
+            grounded = false;
             hasBeenAirborne = true;
-            jumpGraceTimer  = 0.12f;
+            jumpGraceTimer = 0.12f;
+            isSprintJump = sprinting;
             StopSprint();
             SetWalking(false, false);
             SetCrouching(false);
@@ -868,10 +944,10 @@ namespace EcclesiaFighters
         void StopActiveAttack()
         {
             if (attackRoutine != null) { StopCoroutine(attackRoutine); attackRoutine = null; }
-            isAttacking   = false;
+            isAttacking = false;
             currentAttack = AttackType.None;
-            attackPhase   = AttackPhase.None;
-            attackPhaseT  = 0f;
+            attackPhase = AttackPhase.None;
+            attackPhaseT = 0f;
         }
 
         AttackConfig GetAttackConfig(AttackType type)
@@ -879,8 +955,8 @@ namespace EcclesiaFighters
             switch (type)
             {
                 case AttackType.HeavyPunch: return heavyPunch;
-                case AttackType.Kick:       return kick;
-                default:                    return lightPunch;
+                case AttackType.Kick: return kick;
+                default: return lightPunch;
             }
         }
 
@@ -916,8 +992,8 @@ namespace EcclesiaFighters
             {
                 case AttackType.LightPunch: return lightPunchStartup > 0f ? lightPunchStartup : spec.startup;
                 case AttackType.HeavyPunch: return heavyPunchStartup > 0f ? heavyPunchStartup : spec.startup;
-                case AttackType.Kick:       return kickStartup       > 0f ? kickStartup       : spec.startup;
-                default:                    return spec.startup;
+                case AttackType.Kick: return kickStartup > 0f ? kickStartup : spec.startup;
+                default: return spec.startup;
             }
         }
 
@@ -930,7 +1006,7 @@ namespace EcclesiaFighters
         IEnumerator DoMeleeAttack(AttackType type)
         {
             AttackConfig spec = GetAttackConfig(type);
-            isAttacking   = true;
+            isAttacking = true;
             currentAttack = type;
             StopSprint();
             SetWalking(false, false);
@@ -938,7 +1014,7 @@ namespace EcclesiaFighters
             TriggerAttackAnimation(type);
 
             if (type == AttackType.LightPunch) AudioManager.PlayPunchLight();
-            else                               AudioManager.PlayPunchHeavy();
+            else AudioManager.PlayPunchHeavy();
 
             // 1) Startup (synced to impact frame when animated, fast fallback otherwise)
             attackPhase = AttackPhase.Startup;
@@ -950,7 +1026,7 @@ namespace EcclesiaFighters
             bool indicatorSpawned = false;
 
             float activeElapsed = 0f;
-            float activeDur     = Mathf.Max(0.02f, spec.active);
+            float activeDur = Mathf.Max(0.02f, spec.active);
             while (activeElapsed < activeDur)
             {
                 attackPhaseT = activeElapsed / activeDur;
@@ -972,17 +1048,17 @@ namespace EcclesiaFighters
             yield return RunPhaseTimer(spec.recovery);
 
             attackCooldownTimer = spec.cooldown;
-            isAttacking         = false;
-            currentAttack       = AttackType.None;
-            attackPhase         = AttackPhase.None;
-            attackRoutine       = null;
+            isAttacking = false;
+            currentAttack = AttackType.None;
+            attackPhase = AttackPhase.None;
+            attackRoutine = null;
         }
 
         IEnumerator DoSpecialAttack()
         {
-            isAttacking   = true;
+            isAttacking = true;
             currentAttack = AttackType.Special;
-            spCooldown    = specialCooldown;
+            spCooldown = specialCooldown;
             StopSprint();
             SetWalking(false, false);
             SetBlocking(false);
@@ -1002,10 +1078,10 @@ namespace EcclesiaFighters
             yield return RunPhaseTimer(specialRecovery);
 
             attackCooldownTimer = 0.15f;
-            isAttacking         = false;
-            currentAttack       = AttackType.None;
-            attackPhase         = AttackPhase.None;
-            attackRoutine       = null;
+            isAttacking = false;
+            currentAttack = AttackType.None;
+            attackPhase = AttackPhase.None;
+            attackRoutine = null;
         }
 
         IEnumerator RunPhaseTimer(float duration)
@@ -1023,8 +1099,8 @@ namespace EcclesiaFighters
 
         Vector3 GetMeleeHitboxCenter(AttackType type, AttackConfig spec)
         {
-            float feetY     = GetFeetWorldY();
-            float standH    = GetStandingWorldHeight();
+            float feetY = GetFeetWorldY();
+            float standH = GetStandingWorldHeight();
             float heightRatio;
 
             if (crouching)
@@ -1056,12 +1132,12 @@ namespace EcclesiaFighters
 
         void SpawnSpecialProjectile()
         {
-            Transform origin   = EnsureFirePoint();
-            Vector3   facing   = FacingVector;
-            Vector3   spawnPos = origin.position + facing * muzzleForwardOffset;
+            Transform origin = EnsureFirePoint();
+            Vector3 facing = FacingVector;
+            Vector3 spawnPos = origin.position + facing * muzzleForwardOffset;
             if (crouching) spawnPos.y -= GetStandingWorldHeight() * 0.22f;
 
-            Quaternion rot  = Quaternion.LookRotation(facing, Vector3.up);
+            Quaternion rot = Quaternion.LookRotation(facing, Vector3.up);
             GameObject proj = specialPrefab
                 ? Instantiate(specialPrefab, spawnPos, rot)
                 : CreateFallbackProjectile(spawnPos, rot);
@@ -1073,7 +1149,7 @@ namespace EcclesiaFighters
             if (pd)
             {
                 pd.damage = specialDamage;
-                pd.owner  = gameObject;
+                pd.owner = gameObject;
                 pd.SetTravelDirection(facing);
             }
 
@@ -1092,11 +1168,11 @@ namespace EcclesiaFighters
             if (sphereCol) sphereCol.isTrigger = true;
 
             var projRb = go.AddComponent<Rigidbody>();
-            projRb.useGravity  = false;
+            projRb.useGravity = false;
             projRb.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionZ;
 
             var pd = go.AddComponent<ProjectileDamage>();
-            pd.damage   = specialDamage;
+            pd.damage = specialDamage;
             pd.spinSelf = false;
 
             var mr = go.GetComponent<MeshRenderer>();
@@ -1164,7 +1240,7 @@ namespace EcclesiaFighters
             if (dead || invulnTimer > 0f) return;
 
             bool blockedHit = blocking || (grounded && !isAttacking && hitstunTimer <= 0f && holdingAway);
-            float finalDmg  = blockedHit ? amount * blockReduction : amount;
+            float finalDmg = blockedHit ? amount * blockReduction : amount;
 
             if (isSpecialProjectile)
             {
@@ -1201,6 +1277,7 @@ namespace EcclesiaFighters
                 dead = true;
                 StopActiveAttack();
                 hitstunTimer = 0f;
+                isSprintJump = false;
                 StopSprint();
                 SetWalking(false, false);
                 SetCrouching(false);
@@ -1214,16 +1291,17 @@ namespace EcclesiaFighters
             if (blockedHit)
             {
                 blockFlashTimer = 0.16f;
-                invulnTimer     = 0.08f;
+                invulnTimer = 0.08f;
             }
             else
             {
                 StopActiveAttack();
+                isSprintJump = false;
                 StopSprint();
                 SetWalking(false, false);
                 SetBlocking(false);
-                hitstunTimer  = Mathf.Max(hitstunTimer, hitstunDuration);
-                invulnTimer   = invulnerabilityDuration;
+                hitstunTimer = Mathf.Max(hitstunTimer, hitstunDuration);
+                invulnTimer = invulnerabilityDuration;
                 hitFlashTimer = Mathf.Max(0.18f, hitstunDuration);
                 AnimTrigger(HashHit);
             }
@@ -1269,6 +1347,9 @@ namespace EcclesiaFighters
             if (!newGrounded && (Time.time - lastSpawnOrResetTime > 0.25f))
                 hasBeenAirborne = true;
 
+            if (newGrounded)
+                isSprintJump = false;
+
             if (newGrounded && !grounded && hasBeenAirborne)
             {
                 hasBeenAirborne = false;
@@ -1296,14 +1377,14 @@ namespace EcclesiaFighters
         }
 
         void OnCollisionEnter(Collision col) => RecordGroundContact(col);
-        void OnCollisionStay(Collision col)  => RecordGroundContact(col);
+        void OnCollisionStay(Collision col) => RecordGroundContact(col);
 
         void OnDrawGizmosSelected()
         {
             Gizmos.color = new Color(1f, 0.25f, 0.2f, 0.75f);
             Vector3 facing = Application.isPlaying ? FacingVector : transform.forward;
             float standH = capsule ? capsule.height : fallbackChestHeight * 1.4f;
-            float feetY  = capsule ? transform.TransformPoint(0f, capsule.center.y - capsule.height * 0.5f, 0f).y : transform.position.y;
+            float feetY = capsule ? transform.TransformPoint(0f, capsule.center.y - capsule.height * 0.5f, 0f).y : transform.position.y;
             Vector3 center = new Vector3(transform.position.x, feetY + standH * 0.65f, transform.position.z) + facing * lightPunch.range;
             Gizmos.DrawWireCube(center, lightPunch.hitHalfExtents * 2f);
         }
@@ -1331,22 +1412,22 @@ namespace EcclesiaFighters
             hasVisualRoot = visualRoot != null && visualRoot != transform;
             if (hasVisualRoot)
             {
-                baseVisualLocalPos   = visualRoot.localPosition;
-                baseVisualLocalRot   = visualRoot.localRotation;
+                baseVisualLocalPos = visualRoot.localPosition;
+                baseVisualLocalRot = visualRoot.localRotation;
                 baseVisualLocalScale = visualRoot.localScale;
 
                 Vector3 childUp = Quaternion.Inverse(baseVisualLocalRot) * Vector3.up;
                 visualUpWeights = new Vector3(Mathf.Abs(childUp.x), Mathf.Abs(childUp.y), Mathf.Abs(childUp.z));
             }
 
-            cachedRenderers    = GetComponentsInChildren<Renderer>(true);
+            cachedRenderers = GetComponentsInChildren<Renderer>(true);
             baseRendererColors = new Color[cachedRenderers.Length];
             for (int i = 0; i < cachedRenderers.Length; i++)
             {
                 Material m = cachedRenderers[i] ? cachedRenderers[i].sharedMaterial : null;
-                if (m && m.HasProperty(ShaderColorId))          baseRendererColors[i] = m.GetColor(ShaderColorId);
+                if (m && m.HasProperty(ShaderColorId)) baseRendererColors[i] = m.GetColor(ShaderColorId);
                 else if (m && m.HasProperty(ShaderBaseColorId)) baseRendererColors[i] = m.GetColor(ShaderBaseColorId);
-                else                                            baseRendererColors[i] = Color.white;
+                else baseRendererColors[i] = Color.white;
             }
         }
 
@@ -1365,18 +1446,18 @@ namespace EcclesiaFighters
                 placeholderWasActive = true;
 
                 float targetSquash = crouching ? 0.68f : 1f;
-                float targetTilt   = 0f;
-                float targetLunge  = 0f;
+                float targetTilt = 0f;
+                float targetLunge = 0f;
 
                 if (dead)
                 {
                     targetSquash = 0.85f;
-                    targetTilt   = -78f;
-                    targetLunge  = -0.45f;
+                    targetTilt = -78f;
+                    targetLunge = -0.45f;
                 }
                 else if (hitstunTimer > 0f)
                 {
-                    targetTilt  = -18f;
+                    targetTilt = -18f;
                     targetLunge = -0.14f;
                 }
                 else if (isAttacking)
@@ -1385,14 +1466,14 @@ namespace EcclesiaFighters
                 }
                 else if (blocking)
                 {
-                    targetTilt  = -8f;
+                    targetTilt = -8f;
                     targetLunge = -0.06f;
                 }
 
                 float blend = 1f - Mathf.Exp(-20f * Time.deltaTime);
                 currentVisualSquash = Mathf.Lerp(currentVisualSquash, targetSquash, blend);
-                currentVisualTilt   = Mathf.Lerp(currentVisualTilt,   targetTilt,   blend);
-                currentVisualLunge  = Mathf.Lerp(currentVisualLunge,  targetLunge,  blend);
+                currentVisualTilt = Mathf.Lerp(currentVisualTilt, targetTilt, blend);
+                currentVisualLunge = Mathf.Lerp(currentVisualLunge, targetLunge, blend);
 
                 Vector3 scaleFactor = Vector3.one + visualUpWeights * (currentVisualSquash - 1f);
                 visualRoot.localScale = Vector3.Scale(baseVisualLocalScale, scaleFactor);
@@ -1414,7 +1495,7 @@ namespace EcclesiaFighters
                 {
                     visualRoot.localPosition = baseVisualLocalPos;
                     visualRoot.localRotation = baseVisualLocalRot;
-                    visualRoot.localScale    = baseVisualLocalScale;
+                    visualRoot.localScale = baseVisualLocalScale;
                 }
             }
 
@@ -1438,22 +1519,22 @@ namespace EcclesiaFighters
 
         void ComputeAttackPose(out float tiltDeg, out float lungeMeters)
         {
-            float maxTilt  = currentAttack == AttackType.HeavyPunch ? 24f : (currentAttack == AttackType.Kick ? 22f : 16f);
+            float maxTilt = currentAttack == AttackType.HeavyPunch ? 24f : (currentAttack == AttackType.Kick ? 22f : 16f);
             float maxLunge = currentAttack == AttackType.HeavyPunch ? 0.36f : (currentAttack == AttackType.Kick ? 0.40f : 0.24f);
             if (currentAttack == AttackType.Special) { maxTilt = 14f; maxLunge = 0.20f; }
 
             switch (attackPhase)
             {
                 case AttackPhase.Startup:
-                    tiltDeg     = Mathf.Lerp(0f, -8f, attackPhaseT);
+                    tiltDeg = Mathf.Lerp(0f, -8f, attackPhaseT);
                     lungeMeters = Mathf.Lerp(0f, -0.06f, attackPhaseT);
                     break;
                 case AttackPhase.Active:
-                    tiltDeg     = maxTilt;
+                    tiltDeg = maxTilt;
                     lungeMeters = maxLunge;
                     break;
                 case AttackPhase.Recovery:
-                    tiltDeg     = Mathf.Lerp(maxTilt,  0f, attackPhaseT);
+                    tiltDeg = Mathf.Lerp(maxTilt, 0f, attackPhaseT);
                     lungeMeters = Mathf.Lerp(maxLunge, 0f, attackPhaseT);
                     break;
                 default:
@@ -1471,7 +1552,7 @@ namespace EcclesiaFighters
                 if (!r) continue;
                 Color c = Color.Lerp(baseRendererColors[i], tint, strength);
                 r.GetPropertyBlock(propBlock);
-                propBlock.SetColor(ShaderColorId,     c);
+                propBlock.SetColor(ShaderColorId, c);
                 propBlock.SetColor(ShaderBaseColorId, c);
                 r.SetPropertyBlock(propBlock);
             }
@@ -1486,16 +1567,16 @@ namespace EcclesiaFighters
 
         void ResetVisualPose()
         {
-            currentVisualSquash  = 1f;
-            currentVisualTilt    = 0f;
-            currentVisualLunge   = 0f;
+            currentVisualSquash = 1f;
+            currentVisualTilt = 0f;
+            currentVisualLunge = 0f;
             placeholderWasActive = false;
 
             if (hasVisualRoot)
             {
                 visualRoot.localPosition = baseVisualLocalPos;
                 visualRoot.localRotation = baseVisualLocalRot;
-                visualRoot.localScale    = baseVisualLocalScale;
+                visualRoot.localScale = baseVisualLocalScale;
             }
             ClearRendererTint();
         }
@@ -1521,7 +1602,7 @@ namespace EcclesiaFighters
             if (mr)
             {
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                mr.receiveShadows    = false;
+                mr.receiveShadows = false;
 
                 if (!sharedHitIndicatorMat)
                 {
@@ -1544,7 +1625,7 @@ namespace EcclesiaFighters
                             : new Color(1f, 0.82f, 0.2f, 0.38f)));
 
                 var pb = new MaterialPropertyBlock();
-                pb.SetColor(ShaderColorId,     col);
+                pb.SetColor(ShaderColorId, col);
                 pb.SetColor(ShaderBaseColorId, col);
                 mr.SetPropertyBlock(pb);
             }
@@ -1635,7 +1716,7 @@ namespace EcclesiaFighters
 
         void StopSprint()
         {
-            sprinting      = false;
+            sprinting = false;
             sprintInputDir = 0;
             SetRunning(false, false);
         }
@@ -1659,13 +1740,13 @@ namespace EcclesiaFighters
         void ResetAnimator()
         {
             if (!animReady) return;
-            AnimBool(HashWalking,     false);
+            AnimBool(HashWalking, false);
             AnimBool(HashWalkingBack, false);
-            AnimBool(HashRunning,     false);
+            AnimBool(HashRunning, false);
             AnimBool(HashRunningBack, false);
-            AnimBool(HashCrouching,   false);
-            AnimBool(HashBlocking,    false);
-            AnimBool(HashIsGrounded,  grounded);
+            AnimBool(HashCrouching, false);
+            AnimBool(HashBlocking, false);
+            AnimBool(HashIsGrounded, grounded);
             foreach (var kv in animParams)
                 if (kv.Value == AnimatorControllerParameterType.Trigger) anim.ResetTrigger(kv.Key);
 
@@ -1686,13 +1767,13 @@ namespace EcclesiaFighters
         /// <summary>Clears held dev/AI posture, walk timers, and walking state.</summary>
         public void DevClearOverrides()
         {
-            devForceCrouch   = false;
-            devForceBlock    = false;
-            devWalkTimer     = 0f;
+            devForceCrouch = false;
+            devForceBlock = false;
+            devWalkTimer = 0f;
             devWalkJustEnded = false;
-            aiWantsCrouch    = false;
-            aiWantsBlock     = false;
-            holdingAway      = false;
+            aiWantsCrouch = false;
+            aiWantsBlock = false;
+            holdingAway = false;
             SetWalking(false, false);
             SetCrouching(false);
             SetBlocking(false);
@@ -1702,14 +1783,14 @@ namespace EcclesiaFighters
         public void DevReviveAndResetIdle()
         {
             StopActiveAttack();
-            dead                = false;
-            inputEnabled        = true;
-            hitstunTimer        = 0f;
-            invulnTimer         = 0f;
-            hitFlashTimer       = 0f;
-            blockFlashTimer     = 0f;
+            dead = false;
+            inputEnabled = true;
+            hitstunTimer = 0f;
+            invulnTimer = 0f;
+            hitFlashTimer = 0f;
+            blockFlashTimer = 0f;
             attackCooldownTimer = 0f;
-            spCooldown          = 0f;
+            spCooldown = 0f;
 
             DevClearOverrides();
             RestoreCollider();
@@ -1733,10 +1814,10 @@ namespace EcclesiaFighters
             StopActiveAttack();
             DevClearOverrides();
 
-            dead            = true;
-            hitstunTimer    = 0f;
-            invulnTimer     = 0f;
-            hitFlashTimer   = 0f;
+            dead = true;
+            hitstunTimer = 0f;
+            invulnTimer = 0f;
+            hitFlashTimer = 0f;
             blockFlashTimer = 0f;
 
             if (triggerKOEvent)
@@ -1781,7 +1862,7 @@ namespace EcclesiaFighters
                 rb.velocity = v;
             }
 
-            hitstunTimer  = 0.28f;
+            hitstunTimer = 0.28f;
             hitFlashTimer = 0.28f;
             AnimTrigger(HashHit);
             UpdatePlaceholderVisuals();
@@ -1796,9 +1877,9 @@ namespace EcclesiaFighters
 
             StopActiveAttack();
             devForceBlock = false;
-            aiWantsBlock  = false;
+            aiWantsBlock = false;
             SetBlocking(false);
-            hitstunTimer        = 0f;
+            hitstunTimer = 0f;
             attackCooldownTimer = 0f;
 
             attackRoutine = type == AttackType.Special
@@ -1814,10 +1895,10 @@ namespace EcclesiaFighters
 
             StopActiveAttack();
             devForceCrouch = false;
-            devForceBlock  = false;
-            aiWantsCrouch  = false;
-            aiWantsBlock   = false;
-            hitstunTimer   = 0f;
+            devForceBlock = false;
+            aiWantsCrouch = false;
+            aiWantsBlock = false;
+            hitstunTimer = 0f;
             DoJump();
         }
 
@@ -1837,7 +1918,7 @@ namespace EcclesiaFighters
             devForceBlock = active;
             if (active)
             {
-                devWalkTimer     = 0f;
+                devWalkTimer = 0f;
                 devWalkJustEnded = false;
                 SetWalking(false, false);
             }
@@ -1853,11 +1934,11 @@ namespace EcclesiaFighters
             if (!inputEnabled) inputEnabled = true;
 
             StopActiveAttack();
-            devForceBlock    = false;
-            aiWantsBlock     = false;
+            devForceBlock = false;
+            aiWantsBlock = false;
             SetBlocking(false);
-            devWalkRelDir    = relativeDir >= 0 ? 1 : -1;
-            devWalkTimer     = Mathf.Max(0.05f, duration);
+            devWalkRelDir = relativeDir >= 0 ? 1 : -1;
+            devWalkTimer = Mathf.Max(0.05f, duration);
             devWalkJustEnded = false;
         }
     }

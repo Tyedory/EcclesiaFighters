@@ -201,6 +201,12 @@ MonoBehaviour:
   maxHP: 100
   moveSpeed: 4
   backWalkSpeedMultiplier: 0.82
+  doubleTapWindow: 0.28
+  sprintForwardMultiplier: 1.75
+  sprintRetreatMultiplier: 1.45
+  sprintJumpAirMultiplier: 1.6
+  minBodySpacing: 0.68
+  bodyOverlapHeightThreshold: 1.35
   crouchSpeedMultiplier: 0.45
   crouchHeightRatio: 0.6
   jumpForce: 7.5
@@ -249,7 +255,7 @@ MonoBehaviour:
   specialActive: 0.1
   specialRecovery: 0.24
   specialSpeed: 16
-  specialPrefab: {fileID: 0}
+  specialPrefab: {fileID: 6968887332830505520, guid: 5c995535905f2464987231e5da8efa7b, type: 3}
   firePoint: {fileID: 0}
   chestHeightRatio: 0.7
   fallbackChestHeight: 1.3

@@ -55,11 +55,7 @@ namespace EcclesiaFighters.EditorTools
             {
                 if (EditorApplication.isPlayingOrWillChangePlaymode) return;
 
-                string karlProjPath  = KarlDir  + "KarlSpecialProjectile.prefab";
-                string santoProjPath = SantoDir + "SantoSpecialProjectile.prefab";
-
-                bool needProjectiles = !File.Exists(karlProjPath) || !File.Exists(santoProjPath);
-                if (needProjectiles)
+                if (NeedsProjectileSetup())
                     SetupProjectilesBatch(logSummary: true);
 
                 if (ControllerMissingParam(KarlControllerPath, "Running"))
@@ -68,6 +64,28 @@ namespace EcclesiaFighters.EditorTools
                 if (ControllerMissingParam(SantoControllerPath, "Running"))
                     SantoAnimatorSetup.SetupSantoBatch();
             };
+        }
+
+        static bool NeedsProjectileSetup()
+        {
+            string karlProjPath  = KarlDir  + "KarlSpecialProjectile.prefab";
+            string santoProjPath = SantoDir + "SantoSpecialProjectile.prefab";
+            if (!File.Exists(karlProjPath) || !File.Exists(santoProjPath))
+                return true;
+
+            return FighterPrefabMissingSpecial(KarlCharacterPrefabs[0], karlProjPath)
+                || FighterPrefabMissingSpecial(SantoCharacterPrefabs[0], santoProjPath);
+        }
+
+        static bool FighterPrefabMissingSpecial(string fighterPrefabPath, string expectedProjectilePath)
+        {
+            if (!File.Exists(fighterPrefabPath)) return false;
+            GameObject prefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(fighterPrefabPath);
+            if (prefabAsset == null) return false;
+            var fc = prefabAsset.GetComponent<FighterController>();
+            if (fc == null) return false;
+            GameObject expectedProj = AssetDatabase.LoadAssetAtPath<GameObject>(expectedProjectilePath);
+            return expectedProj != null && fc.specialPrefab != expectedProj;
         }
 
         static bool ControllerMissingParam(string controllerPath, string paramName)
@@ -126,8 +144,23 @@ namespace EcclesiaFighters.EditorTools
             };
 
             int built = 0;
-            if (BuildAndWireProjectile(karlSpec))  built++;
-            if (BuildAndWireProjectile(santoSpec)) built++;
+            try
+            {
+                if (BuildAndWireProjectile(karlSpec)) built++;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[ProjectileSetupTool] Karl projectile setup error: " + ex);
+            }
+
+            try
+            {
+                if (BuildAndWireProjectile(santoSpec)) built++;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[ProjectileSetupTool] Santo projectile setup error: " + ex);
+            }
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -492,20 +525,41 @@ namespace EcclesiaFighters.EditorTools
 
         static void AssignProjectileToFighterPrefab(string fighterPrefabPath, GameObject projectilePrefab)
         {
-            GameObject root = PrefabUtility.LoadPrefabContents(fighterPrefabPath);
+            GameObject prefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(fighterPrefabPath);
+            if (prefabAsset == null)
+            {
+                Debug.LogWarning($"[ProjectileSetupTool] Skipping missing prefab asset: {fighterPrefabPath}");
+                return;
+            }
+            if (PrefabUtility.GetPrefabAssetType(prefabAsset) == PrefabAssetType.MissingAsset)
+            {
+                Debug.LogWarning($"[ProjectileSetupTool] Skipping broken prefab variant (MissingAsset): {fighterPrefabPath}");
+                return;
+            }
+
+            var fc = prefabAsset.GetComponent<FighterController>();
+            if (fc == null)
+            {
+                Debug.LogWarning($"[ProjectileSetupTool] No FighterController on prefab asset: {fighterPrefabPath}");
+                return;
+            }
+
             try
             {
-                var fc = root.GetComponent<FighterController>();
-                if (fc != null)
+                var so = new SerializedObject(fc);
+                SerializedProperty spProp = so.FindProperty("specialPrefab");
+                if (spProp != null)
                 {
-                    fc.specialPrefab = projectilePrefab;
-                    EditorUtility.SetDirty(fc);
-                    PrefabUtility.SaveAsPrefabAsset(root, fighterPrefabPath);
+                    spProp.objectReferenceValue = projectilePrefab;
+                    so.ApplyModifiedPropertiesWithoutUndo();
                 }
+
+                EditorUtility.SetDirty(fc);
+                EditorUtility.SetDirty(prefabAsset);
             }
-            finally
+            catch (Exception ex)
             {
-                PrefabUtility.UnloadPrefabContents(root);
+                Debug.LogWarning($"[ProjectileSetupTool] Could not assign specialPrefab on '{fighterPrefabPath}' ({ex.GetType().Name}: {ex.Message}).");
             }
         }
 

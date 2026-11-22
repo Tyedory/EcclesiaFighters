@@ -224,6 +224,9 @@ MonoBehaviour:
   doubleTapWindow: 0.28
   sprintForwardMultiplier: 1.75
   sprintRetreatMultiplier: 1.45
+  sprintJumpAirMultiplier: 1.6
+  minBodySpacing: 0.68
+  bodyOverlapHeightThreshold: 1.35
   crouchSpeedMultiplier: 0.45
   crouchHeightRatio: 0.6
   jumpForce: 11.2
