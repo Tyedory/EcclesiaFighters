@@ -1,7 +1,8 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace EcclesiaFighters
 {
@@ -32,30 +33,57 @@ namespace EcclesiaFighters
         public string mapSelectScene  = "MapSelect";
 
         private int selectedIndex = 0;
+        private bool introPlaying = false;
+        private bool menuReady    = false;
+        private Coroutine introRoutine;
+        private Coroutine enableMenuRoutine;
+
         private readonly Color normalColor   = new Color(0.96f, 0.93f, 0.86f);
         private readonly Color selectedColor = new Color(1.00f, 0.84f, 0.30f);
 
         void Start()
         {
-            titlePanel.SetActive(true);
-            if (charSelectPanel) charSelectPanel.SetActive(false);
-            if (mapSelectPanel)  mapSelectPanel.SetActive(false);
-            if (settingsPanel) settingsPanel.SetActive(false);
-            fadeOverlay.color = Color.black;
-            if (bgmSource)
+            if (titlePanel != null)      titlePanel.SetActive(true);
+            if (charSelectPanel != null) charSelectPanel.SetActive(false);
+            if (mapSelectPanel != null)  mapSelectPanel.SetActive(false);
+            if (settingsPanel != null)   settingsPanel.SetActive(false);
+            if (fadeOverlay != null)     fadeOverlay.color = Color.black;
+
+            introPlaying = true;
+            menuReady    = false;
+            SetGroupState(titleLogoGroup, alpha: 0f, interactive: false);
+            SetGroupState(menuGroup,      alpha: 0f, interactive: false);
+
+            if (bgmSource != null)
             {
                 bgmSource.Stop();
                 bgmSource.playOnAwake = false;
                 bgmSource.enabled     = false;
             }
             AudioManager.PlayTitleBGM();
-            StartCoroutine(IntroSequence());
+
+            introRoutine = StartCoroutine(IntroSequence());
             StartCoroutine(LightningLoop());
         }
 
         void Update()
         {
-            if (!titlePanel.activeSelf) return;
+            if (titlePanel == null || !titlePanel.activeSelf) return;
+
+            if (introPlaying)
+            {
+                if (Input.GetMouseButtonDown(0) ||
+                    Input.GetKeyDown(KeyCode.Space) ||
+                    Input.GetKeyDown(KeyCode.Return) ||
+                    Input.GetKeyDown(KeyCode.KeypadEnter))
+                {
+                    SkipIntroImmediately();
+                }
+                return;
+            }
+
+            if (!menuReady || menuButtons == null || menuButtons.Length == 0) return;
+
             if (Input.GetKeyDown(KeyCode.DownArrow))
             {
                 AudioManager.PlayUIHover();
@@ -67,16 +95,79 @@ namespace EcclesiaFighters
                 UpdateSel((selectedIndex + menuButtons.Length - 1) % menuButtons.Length);
             }
             if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space))
-                menuButtons[selectedIndex].onClick.Invoke();
+            {
+                if (menuButtons[selectedIndex] != null)
+                    menuButtons[selectedIndex].onClick.Invoke();
+            }
         }
 
         IEnumerator IntroSequence()
         {
-            yield return Fade(1, 0, 0.9f);
-            yield return FadeGroup(titleLogoGroup, 0, 1, 1.1f);
+            yield return Fade(1f, 0f, 0.9f);
+            yield return FadeGroup(titleLogoGroup, 0f, 1f, 1.1f);
             yield return new WaitForSeconds(0.4f);
-            yield return FadeGroup(menuGroup, 0, 1, 0.8f);
+            yield return FadeGroup(menuGroup, 0f, 1f, 0.8f);
+
+            introPlaying = false;
+            introRoutine = null;
             UpdateSel(0);
+            SetMenuInteractive(true);
+        }
+
+        void SkipIntroImmediately()
+        {
+            if (!introPlaying) return;
+            introPlaying = false;
+
+            if (introRoutine != null)
+            {
+                StopCoroutine(introRoutine);
+                introRoutine = null;
+            }
+
+            if (fadeOverlay != null) fadeOverlay.color = new Color(0f, 0f, 0f, 0f);
+            SetGroupState(titleLogoGroup, alpha: 1f, interactive: false);
+            // Reveal buttons visually right away, but delay raycast/click readiness until skip input releases
+            SetGroupState(menuGroup,      alpha: 1f, interactive: false);
+
+            UpdateSel(0);
+            ClearEventSystemSelection();
+
+            if (enableMenuRoutine != null) StopCoroutine(enableMenuRoutine);
+            enableMenuRoutine = StartCoroutine(EnableMenuAfterInputConsumed());
+        }
+
+        IEnumerator EnableMenuAfterInputConsumed()
+        {
+            yield return null;
+            while (Input.GetMouseButton(0)) yield return null;
+            yield return null;
+            SetMenuInteractive(true);
+            enableMenuRoutine = null;
+        }
+
+        void SetMenuInteractive(bool interactive)
+        {
+            menuReady = interactive;
+            if (menuGroup != null)
+            {
+                menuGroup.interactable   = interactive;
+                menuGroup.blocksRaycasts = interactive;
+            }
+        }
+
+        static void SetGroupState(CanvasGroup group, float alpha, bool interactive)
+        {
+            if (group == null) return;
+            group.alpha          = alpha;
+            group.interactable   = interactive;
+            group.blocksRaycasts = interactive;
+        }
+
+        static void ClearEventSystemSelection()
+        {
+            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
+                EventSystem.current.SetSelectedGameObject(null);
         }
 
         IEnumerator LightningLoop()
@@ -85,43 +176,55 @@ namespace EcclesiaFighters
             {
                 yield return new WaitForSeconds(8f + Random.Range(0f, 5f));
                 float t = 0f;
-                while (t < 0.22f) { t += Time.deltaTime; lightningFlash.color = new Color(1,1,1,Mathf.Sin(t/0.22f*Mathf.PI)*0.12f); yield return null; }
-                lightningFlash.color = Color.clear;
+                while (t < 0.22f)
+                {
+                    t += Time.deltaTime;
+                    if (lightningFlash != null)
+                        lightningFlash.color = new Color(1, 1, 1, Mathf.Sin(t / 0.22f * Mathf.PI) * 0.12f);
+                    yield return null;
+                }
+                if (lightningFlash != null) lightningFlash.color = Color.clear;
             }
         }
 
         public void UpdateSel(int idx)
         {
+            if (menuButtons == null || menuButtons.Length == 0) return;
             selectedIndex = idx;
             for (int i = 0; i < menuButtons.Length; i++)
             {
+                if (menuButtons[i] == null) continue;
                 var txt = menuButtons[i].GetComponentInChildren<Text>();
-                if (txt) txt.color = i == idx ? selectedColor : normalColor;
+                if (txt != null) txt.color = i == idx ? selectedColor : normalColor;
                 var juice = menuButtons[i].GetComponent<UIButtonJuice>();
-                if (juice) juice.SetSelected(i == idx);
+                if (juice != null) juice.SetSelected(i == idx);
             }
         }
 
         // Called by "Iniciar Batalha" button
-        // (panel flow if the panel lives in this scene, otherwise load the CharSelect/MapSelect scene)
         public void GotoCharSelect()
         {
-            if (charSelectPanel) StartCoroutine(TransitionTo(charSelectPanel, bgmCharClip));
-            else                 StartCoroutine(FadeAndLoad(charSelectScene));
+            if (!menuReady) return;
+            if (charSelectPanel != null) StartCoroutine(TransitionTo(charSelectPanel, bgmCharClip));
+            else                         StartCoroutine(FadeAndLoad(charSelectScene));
         }
+
         public void GotoSettings()
         {
-            if (settingsPanel) StartCoroutine(TransitionTo(settingsPanel, null));
+            if (!menuReady) return;
+            if (settingsPanel != null) StartCoroutine(TransitionTo(settingsPanel, null));
         }
+
         public void GotoMapSelect()
         {
-            if (mapSelectPanel) StartCoroutine(TransitionToMap());
-            else                StartCoroutine(FadeAndLoad(mapSelectScene));
+            if (mapSelectPanel != null) StartCoroutine(TransitionToMap());
+            else                        StartCoroutine(FadeAndLoad(mapSelectScene));
         }
 
         // Called by the "Sair" button
         public void QuitGame()
         {
+            if (!menuReady) return;
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
 #else
@@ -131,25 +234,27 @@ namespace EcclesiaFighters
 
         IEnumerator FadeAndLoad(string sceneName)
         {
-            yield return Fade(0, 1, 0.4f);
+            SetMenuInteractive(false);
+            yield return Fade(0f, 1f, 0.4f);
             SceneManager.LoadScene(sceneName);
         }
 
         IEnumerator TransitionTo(GameObject target, AudioClip clip)
         {
-            yield return Fade(0, 1, 0.4f);
+            SetMenuInteractive(false);
+            yield return Fade(0f, 1f, 0.4f);
             if (target == charSelectPanel) AudioManager.PlayCharSelectBGM();
-            titlePanel.SetActive(false);
-            target.SetActive(true);
-            yield return Fade(1, 0, 0.4f);
+            if (titlePanel != null) titlePanel.SetActive(false);
+            if (target != null)     target.SetActive(true);
+            yield return Fade(1f, 0f, 0.4f);
         }
 
         IEnumerator TransitionToMap()
         {
-            yield return Fade(0, 1, 0.35f);
-            charSelectPanel.SetActive(false);
-            mapSelectPanel.SetActive(true);
-            yield return Fade(1, 0, 0.35f);
+            yield return Fade(0f, 1f, 0.35f);
+            if (charSelectPanel != null) charSelectPanel.SetActive(false);
+            if (mapSelectPanel != null)  mapSelectPanel.SetActive(true);
+            yield return Fade(1f, 0f, 0.35f);
         }
 
         public void ReturnToTitle()   { AudioManager.PlayUIBack(); StartCoroutine(BackToTitle()); }
@@ -157,35 +262,50 @@ namespace EcclesiaFighters
 
         IEnumerator BackToTitle()
         {
-            yield return Fade(0, 1, 0.35f);
+            SetMenuInteractive(false);
+            yield return Fade(0f, 1f, 0.35f);
             AudioManager.PlayTitleBGM();
-            if (charSelectPanel) charSelectPanel.SetActive(false);
-            if (mapSelectPanel)  mapSelectPanel.SetActive(false);
-            if (settingsPanel) settingsPanel.SetActive(false);
-            titlePanel.SetActive(true);
-            yield return Fade(1, 0, 0.35f);
+            if (charSelectPanel != null) charSelectPanel.SetActive(false);
+            if (mapSelectPanel != null)  mapSelectPanel.SetActive(false);
+            if (settingsPanel != null)   settingsPanel.SetActive(false);
+            if (titlePanel != null)      titlePanel.SetActive(true);
+            yield return Fade(1f, 0f, 0.35f);
+            SetMenuInteractive(true);
         }
 
         IEnumerator BackToChar()
         {
-            yield return Fade(0, 1, 0.3f);
+            yield return Fade(0f, 1f, 0.3f);
             AudioManager.PlayCharSelectBGM();
-            mapSelectPanel.SetActive(false);
-            charSelectPanel.SetActive(true);
-            yield return Fade(1, 0, 0.3f);
+            if (mapSelectPanel != null)  mapSelectPanel.SetActive(false);
+            if (charSelectPanel != null) charSelectPanel.SetActive(true);
+            yield return Fade(1f, 0f, 0.3f);
         }
 
         IEnumerator Fade(float from, float to, float dur)
         {
-            float t = 0; fadeOverlay.color = new Color(0,0,0,from);
-            while (t < dur) { t += Time.deltaTime; fadeOverlay.color = new Color(0,0,0,Mathf.Lerp(from,to,t/dur)); yield return null; }
-            fadeOverlay.color = new Color(0,0,0,to);
+            float t = 0f;
+            if (fadeOverlay != null) fadeOverlay.color = new Color(0f, 0f, 0f, from);
+            while (t < dur)
+            {
+                t += Time.deltaTime;
+                if (fadeOverlay != null) fadeOverlay.color = new Color(0f, 0f, 0f, Mathf.Lerp(from, to, t / dur));
+                yield return null;
+            }
+            if (fadeOverlay != null) fadeOverlay.color = new Color(0f, 0f, 0f, to);
         }
 
         IEnumerator FadeGroup(CanvasGroup g, float from, float to, float dur)
         {
-            float t = 0; g.alpha = from;
-            while (t < dur) { t += Time.deltaTime; g.alpha = Mathf.Lerp(from,to,t/dur); yield return null; }
+            if (g == null) yield break;
+            float t = 0f;
+            g.alpha = from;
+            while (t < dur)
+            {
+                t += Time.deltaTime;
+                g.alpha = Mathf.Lerp(from, to, t / dur);
+                yield return null;
+            }
             g.alpha = to;
         }
     }

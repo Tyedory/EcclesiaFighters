@@ -75,6 +75,9 @@ namespace EcclesiaFighters
 
         IEnumerator Setup()
         {
+            roundTime = MatchConfig.MatchDurationSeconds;
+            if (timerText != null) timerText.text = Mathf.CeilToInt(roundTime).ToString();
+
             // Map (0 = Nave Central / Exterior key, 1 = Altar Sagrado / Interior key)
             string map = PlayerPrefs.GetString("SelectedMap", "Exterior");
             int stageIdx = (map == "Interior" || map == "1") ? 1 : 0;
@@ -138,6 +141,8 @@ namespace EcclesiaFighters
             int cleanB  = Clamp(idxB);
             bool p1IsAI = PlayerPrefs.GetInt("P1IsAI", 0) == 1;
             bool p2IsAI = PlayerPrefs.GetInt("P2IsAI", 1) == 1;
+            float hpMul = MatchConfig.GetHPMultiplier();
+            FighterAI.Difficulty aiDiff = MatchConfig.ToFighterAIDifficulty(MatchConfig.Difficulty);
 
             objA = Instantiate(characterPrefabs[cleanA], spawnA.position, Quaternion.Euler(0, 90, 0));
             objB = Instantiate(characterPrefabs[cleanB], spawnB.position, Quaternion.Euler(0, -90, 0));
@@ -147,27 +152,31 @@ namespace EcclesiaFighters
             ctrlA = objA.GetComponent<FighterController>();
             ctrlB = objB.GetComponent<FighterController>();
 
-            if (ctrlA)
+            if (ctrlA != null)
             {
                 ctrlA.characterName = NAMES[cleanA];
-                ctrlA.ConfigureControlOwnership(playerControlled: !p1IsAI, slotIndex: 0);
+                FighterAI aiA = ctrlA.ConfigureControlOwnership(playerControlled: !p1IsAI, slotIndex: 0);
+                if (aiA != null) aiA.SetDifficulty(aiDiff);
                 ctrlA.opponent      = objB.transform;
                 ctrlA.hpBar         = hpBarA;
+                ctrlA.ApplyHPMultiplier(hpMul);
                 ctrlA.FaceDirection(+1);
                 ctrlA.OnKO         += () => EndRound(false);
                 ctrlA.SetInputEnabled(false);
-                if (nameTagA) nameTagA.text = NAMES[cleanA];
+                if (nameTagA != null) nameTagA.text = NAMES[cleanA];
             }
-            if (ctrlB)
+            if (ctrlB != null)
             {
                 ctrlB.characterName = NAMES[cleanB];
-                ctrlB.ConfigureControlOwnership(playerControlled: !p2IsAI, slotIndex: 1);
+                FighterAI aiB = ctrlB.ConfigureControlOwnership(playerControlled: !p2IsAI, slotIndex: 1);
+                if (aiB != null) aiB.SetDifficulty(aiDiff);
                 ctrlB.opponent      = objA.transform;
                 ctrlB.hpBar         = hpBarB;
+                ctrlB.ApplyHPMultiplier(hpMul);
                 ctrlB.FaceDirection(-1);
                 ctrlB.OnKO         += () => EndRound(true);
                 ctrlB.SetInputEnabled(false);
-                if (nameTagB) nameTagB.text = NAMES[cleanB];
+                if (nameTagB != null) nameTagB.text = NAMES[cleanB];
             }
             yield return null;
         }

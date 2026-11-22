@@ -172,7 +172,7 @@ namespace EcclesiaFighters
 
         // ── Public state (read by FighterAI & HUD) ────────────
         public float      CurrentHP             => hp;
-        public float      HPRatio               => hp / maxHP;
+        public float      HPRatio               => maxHP > 0f ? Mathf.Clamp01(hp / maxHP) : 0f;
         public bool       IsGrounded            => grounded;
         public bool       IsBlocking            => blocking;
         public bool       IsCrouching           => crouching;
@@ -217,7 +217,7 @@ namespace EcclesiaFighters
         static Material sharedFallbackProjMat;
 
         // ── Runtime state ─────────────────────────────────────
-        float hp, spCooldown, attackCooldownTimer;
+        float hp, baseMaxHP, spCooldown, attackCooldownTimer;
         float hitstunTimer, invulnTimer, hitFlashTimer, blockFlashTimer;
         float jumpGraceTimer, lastGroundContactTime = -10f;
         float stageZ;
@@ -277,6 +277,7 @@ namespace EcclesiaFighters
 
             rb.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionZ;
             stageZ = transform.position.z;
+            baseMaxHP = Mathf.Max(1f, maxHP);
             lastSpawnOrResetTime = Time.time;
 
             if (capsule)
@@ -349,8 +350,27 @@ namespace EcclesiaFighters
             RestoreCollider();
             ResetVisualPose();
 
-            if (hpBar) hpBar.value = 1f;
+            if (hpBar != null)
+            {
+                hpBar.minValue = 0f;
+                hpBar.maxValue = 1f;
+                hpBar.value    = 1f;
+            }
             ResetAnimator();
+        }
+
+        /// <summary>Scales maxHP from the fighter's original baseMaxHP without compounding across rounds.</summary>
+        public void ApplyHPMultiplier(float multiplier)
+        {
+            if (baseMaxHP <= 0f) baseMaxHP = Mathf.Max(1f, maxHP);
+            maxHP = Mathf.Max(1f, Mathf.Round(baseMaxHP * Mathf.Clamp(multiplier, 0.25f, 5f)));
+            hp    = maxHP;
+            if (hpBar != null)
+            {
+                hpBar.minValue = 0f;
+                hpBar.maxValue = 1f;
+                hpBar.value    = 1f;
+            }
         }
 
         public void SetInputEnabled(bool v)
@@ -1084,7 +1104,7 @@ namespace EcclesiaFighters
             }
 
             hp = infiniteHP ? maxHP : Mathf.Max(0f, hp - finalDmg);
-            if (hpBar) hpBar.value = hp / maxHP;
+            if (hpBar != null) hpBar.value = HPRatio;
 
             float dirX = Mathf.Abs(knockbackDir.x) > 0.01f ? Mathf.Sign(knockbackDir.x) : -FacingDir;
             float appliedKB = blockedHit ? knockbackForce * blockKnockbackScale : knockbackForce;
@@ -1645,7 +1665,7 @@ namespace EcclesiaFighters
             if (!infiniteHP && damage > 0f)
             {
                 hp = Mathf.Max(0f, hp - damage);
-                if (hpBar) hpBar.value = hp / maxHP;
+                if (hpBar != null) hpBar.value = HPRatio;
             }
 
             if (rb)

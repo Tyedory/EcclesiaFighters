@@ -180,7 +180,9 @@ namespace EcclesiaFighters.EditorTools
             RectTransform menu = NewRect("MenuGroup", titlePanel);
             Region(menu, 0.34f, 0.10f, 0.66f, 0.50f);
             var menuGroup = menu.gameObject.AddComponent<CanvasGroup>();
-            menuGroup.alpha = 0f;
+            menuGroup.alpha          = 0f;
+            menuGroup.interactable   = false;
+            menuGroup.blocksRaycasts = false;
 
             Image menuTray = AddFramedPanel(menu, "MenuTray", new Color(0.04f, 0.03f, 0.06f, 0.78f), MutedGold, false);
             Stretch(menuTray.rectTransform);
@@ -775,14 +777,14 @@ namespace EcclesiaFighters.EditorTools
 
             // Top banner
             Image banner = AddFramedPanel(root, "HeaderBanner", BurgundyPanel, AntiqueGold, false);
-            Region(banner.rectTransform, 0.14f, 0.87f, 0.86f, 0.97f);
+            Region(banner.rectTransform, 0.14f, 0.885f, 0.86f, 0.972f);
             Text header = AddText(banner.rectTransform, "Header", "ESCOLHA O CAMPO DE BATALHA", 48, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
             Stretch(header.rectTransform);
             AddStrongTextEffects(header, 2.5f, 3.5f);
 
             // VS matchup bar
             Image vsBar = AddFramedPanel(root, "VSBar", ObsidianPanel, AntiqueGold, false);
-            Region(vsBar.rectTransform, 0.22f, 0.76f, 0.78f, 0.845f);
+            Region(vsBar.rectTransform, 0.22f, 0.790f, 0.78f, 0.868f);
 
             mgr.nameA = AddText(vsBar.rectTransform, "NameA", "JOGADOR 1", 36, FaithBlue, TextAnchor.MiddleCenter, FontStyle.Bold);
             Region(mgr.nameA.rectTransform, 0.03f, 0f, 0.42f, 1f);
@@ -802,6 +804,9 @@ namespace EcclesiaFighters.EditorTools
                 mgr.bgInterior, 0.52f, 0.94f, out mgr.cardInterior);
             UnityEventTools.AddPersistentListener(ext.onClick, mgr.SelectExterior);
             UnityEventTools.AddPersistentListener(inn.onClick, mgr.SelectInterior);
+
+            // Compact Match Rules bar between Stage cards and bottom navigation buttons
+            BuildMatchRulesPanel(root, mgr);
 
             // Go / Back
             mgr.goBtn = AddButton(root, "Btn_IniciarLuta", "INICIAR LUTA", 36, ButtonVariant.PrimaryCrimson);
@@ -846,7 +851,7 @@ namespace EcclesiaFighters.EditorTools
             float x0, float x1, out Image cardImage)
         {
             cardImage = AddImage(root, name, Color.white, sprite, true);
-            Region(cardImage.rectTransform, x0, 0.175f, x1, 0.735f);
+            Region(cardImage.rectTransform, x0, 0.325f, x1, 0.772f);
             AddOutline(cardImage, MutedGold, 2f);
 
             // Ornate border frame overlaid cleanly above the artwork
@@ -882,6 +887,111 @@ namespace EcclesiaFighters.EditorTools
             juice.hoverScale       = 1.015f;
             juice.selectedScale    = 1.025f;
             juice.pressedScale     = 0.985f;
+            return btn;
+        }
+
+        static void BuildMatchRulesPanel(RectTransform root, MapSelectManager mgr)
+        {
+            Image panel = AddFramedPanel(root, "MatchRulesPanel", ObsidianPanel, AntiqueGold, true);
+            Region(panel.rectTransform, 0.06f, 0.148f, 0.94f, 0.305f);
+            mgr.matchRulesPanel = panel.gameObject;
+
+            Text hdr = AddText(panel.rectTransform, "RulesHeader", "✦  REGRAS DA PARTIDA  ✦", 19, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Region(hdr.rectTransform, 0.02f, 0.74f, 0.98f, 0.96f);
+
+            Text note = AddText(panel.rectTransform, "AIRuleNote", "MODO 2P LOCAL · IA DESATIVADA", 13, IvoryMuted, TextAnchor.MiddleRight, FontStyle.Italic);
+            Region(note.rectTransform, 0.66f, 0.74f, 0.975f, 0.96f);
+            mgr.aiRuleNoteText = note;
+
+            RectTransform body = NewRect("RulesBody", panel.rectTransform);
+            Region(body, 0.015f, 0.08f, 0.985f, 0.72f);
+
+            var hlg = body.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hlg.padding = new RectOffset(20, 20, 4, 8);
+            hlg.spacing = 22f;
+            hlg.childAlignment = TextAnchor.MiddleCenter;
+            hlg.childControlWidth = true; hlg.childControlHeight = true;
+            hlg.childForceExpandWidth = true; hlg.childForceExpandHeight = true;
+
+            // Column 1: AI Difficulty
+            RectTransform colDiff = BuildRuleColumn(body, "Col_AIDifficulty", "DIFICULDADE IA", 1.15f);
+            mgr.aiDifficultyGroup = colDiff.gameObject.AddComponent<CanvasGroup>();
+            RectTransform diffRow = BuildRuleButtonRow(colDiff, "DifficultyRow", 8f);
+
+            mgr.difficultyButtons = new Button[3];
+            mgr.difficultyButtons[0] = BuildRuleChoiceButton(diffRow, "Btn_DiffEasy",   "FÁCIL",   16, mgr.SetDifficultyEasy);
+            mgr.difficultyButtons[1] = BuildRuleChoiceButton(diffRow, "Btn_DiffNormal", "NORMAL",  16, mgr.SetDifficultyNormal);
+            mgr.difficultyButtons[2] = BuildRuleChoiceButton(diffRow, "Btn_DiffHard",   "DIFÍCIL", 16, mgr.SetDifficultyHard);
+
+            // Column 2: Round Duration Stepper
+            RectTransform colDur = BuildRuleColumn(body, "Col_Duration", "TEMPO DO ROUND", 0.85f);
+            RectTransform durRow = BuildRuleButtonRow(colDur, "DurationRow", 10f);
+
+            mgr.prevDurationButton = BuildRuleChoiceButton(durRow, "Btn_DurPrev", "<", 22, mgr.PrevDuration);
+            SetLayoutElement(mgr.prevDurationButton.gameObject, preferredWidth: 54f, flexibleWidth: 0f);
+
+            Image durBox = AddFramedPanel(durRow, "DurationValueBox", SlotDark, MutedGold, false);
+            SetLayoutElement(durBox.gameObject, flexibleWidth: 1f);
+            Text durTxt = AddText(durBox.rectTransform, "DurationLabel", "99s", 24, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            durTxt.resizeTextForBestFit = true; durTxt.resizeTextMinSize = 16; durTxt.resizeTextMaxSize = 26;
+            Stretch(durTxt.rectTransform);
+            mgr.durationLabel = durTxt;
+
+            mgr.nextDurationButton = BuildRuleChoiceButton(durRow, "Btn_DurNext", ">", 22, mgr.NextDuration);
+            SetLayoutElement(mgr.nextDurationButton.gameObject, preferredWidth: 54f, flexibleWidth: 0f);
+
+            // Column 3: Fighter HP Preset
+            RectTransform colHP = BuildRuleColumn(body, "Col_HPPreset", "VIDA (HP)", 1.15f);
+            RectTransform hpRow = BuildRuleButtonRow(colHP, "HPRow", 8f);
+
+            mgr.hpButtons = new Button[3];
+            mgr.hpButtons[0] = BuildRuleChoiceButton(hpRow, "Btn_HPLow",    "BAIXO", 16, mgr.SetHPLow);
+            mgr.hpButtons[1] = BuildRuleChoiceButton(hpRow, "Btn_HPMedium", "MÉDIO", 16, mgr.SetHPMedium);
+            mgr.hpButtons[2] = BuildRuleChoiceButton(hpRow, "Btn_HPHigh",   "ALTO",  16, mgr.SetHPHigh);
+        }
+
+        static RectTransform BuildRuleColumn(RectTransform parent, string name, string label, float flexWidth)
+        {
+            RectTransform col = NewRect(name, parent);
+            SetLayoutElement(col.gameObject, flexibleWidth: flexWidth);
+
+            var vlg = col.gameObject.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = 6f;
+            vlg.childAlignment = TextAnchor.UpperCenter;
+            vlg.childControlWidth = true; vlg.childControlHeight = true;
+            vlg.childForceExpandWidth = true; vlg.childForceExpandHeight = false;
+
+            Text lbl = AddText(col, "Label", label, 15, AntiqueGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            SetLayoutElement(lbl.gameObject, preferredHeight: 22f);
+            return col;
+        }
+
+        static RectTransform BuildRuleButtonRow(RectTransform parent, string name, float spacing)
+        {
+            RectTransform row = NewRect(name, parent);
+            SetLayoutElement(row.gameObject, preferredHeight: 44f, flexibleHeight: 1f);
+
+            var hlg = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hlg.spacing = spacing;
+            hlg.childAlignment = TextAnchor.MiddleCenter;
+            hlg.childControlWidth = true; hlg.childControlHeight = true;
+            hlg.childForceExpandWidth = true; hlg.childForceExpandHeight = true;
+            return row;
+        }
+
+        static Button BuildRuleChoiceButton(RectTransform parent, string name, string label, int fontSize, UnityEngine.Events.UnityAction action)
+        {
+            Button btn = AddButton(parent, name, label, fontSize, ButtonVariant.Compact);
+            var juice = btn.GetComponent<UIButtonJuice>();
+            if (juice != null)
+            {
+                juice.hoverScale     = 1.02f;
+                juice.selectedScale  = 1.02f;
+                juice.pressedScale   = 0.98f;
+                juice.clickSoundRole = UIButtonJuice.UISoundRole.StandardClick;
+            }
+            if (action != null)
+                UnityEventTools.AddPersistentListener(btn.onClick, action);
             return btn;
         }
 

@@ -20,6 +20,7 @@ namespace EcclesiaFighters
 
         [Header("AI Settings")]
         public Difficulty difficulty = Difficulty.Medio;
+        public bool       useMatchConfigDifficulty = true;
 
         [Header("Distâncias")]
         public float closeRange = 1.32f;
@@ -28,11 +29,18 @@ namespace EcclesiaFighters
 
         // Tunables per difficulty
         float reactionDelay;
+        float hesitationChance;
         float missChance;
         float blockReactChance;
         float crouchReactChance;
+        float defenseCheckInterval = 0.75f;
         float comboChance;
         float specialMinInterval;
+        float specialMidChance     = 0.48f;
+        float specialLongChance    = 0.38f;
+        float punishChance         = 0.42f;
+        float antiJumpChance       = 0.35f;
+        float meleeBlockChance     = 0.14f;
 
         FighterController self;
         FighterController opponentCtrl;
@@ -57,9 +65,18 @@ namespace EcclesiaFighters
                 enabled = false;
                 return;
             }
+            if (useMatchConfigDifficulty)
+                difficulty = MatchConfig.ToFighterAIDifficulty(MatchConfig.Difficulty);
             ConfigDifficulty();
             if (thinkRoutine != null) StopCoroutine(thinkRoutine);
             thinkRoutine = StartCoroutine(Think());
+        }
+
+        public void SetDifficulty(Difficulty newDifficulty)
+        {
+            difficulty = newDifficulty;
+            useMatchConfigDifficulty = false;
+            ConfigDifficulty();
         }
 
         void OnDisable()
@@ -95,28 +112,49 @@ namespace EcclesiaFighters
             switch (difficulty)
             {
                 case Difficulty.Facil:
-                    reactionDelay      = 0.55f;
-                    missChance         = 0.28f;
-                    blockReactChance   = 0.20f;
-                    crouchReactChance  = 0.14f;
-                    comboChance        = 0.15f;
-                    specialMinInterval = 7.5f;
+                    reactionDelay        = 0.72f;
+                    hesitationChance     = 0.30f;
+                    missChance           = 0.30f;
+                    blockReactChance     = 0.12f;
+                    crouchReactChance    = 0.08f;
+                    defenseCheckInterval = 1.25f;
+                    comboChance          = 0.10f;
+                    specialMinInterval   = 9.0f;
+                    specialMidChance     = 0.22f;
+                    specialLongChance    = 0.18f;
+                    punishChance         = 0.10f;
+                    antiJumpChance       = 0.10f;
+                    meleeBlockChance     = 0.06f;
                     break;
                 case Difficulty.Medio:
-                    reactionDelay      = 0.28f;
-                    missChance         = 0.12f;
-                    blockReactChance   = 0.42f;
-                    crouchReactChance  = 0.24f;
-                    comboChance        = 0.40f;
-                    specialMinInterval = 5.5f;
+                    reactionDelay        = 0.28f;
+                    hesitationChance     = 0.06f;
+                    missChance           = 0.12f;
+                    blockReactChance     = 0.42f;
+                    crouchReactChance    = 0.22f;
+                    defenseCheckInterval = 0.75f;
+                    comboChance          = 0.40f;
+                    specialMinInterval   = 5.5f;
+                    specialMidChance     = 0.48f;
+                    specialLongChance    = 0.38f;
+                    punishChance         = 0.42f;
+                    antiJumpChance       = 0.35f;
+                    meleeBlockChance     = 0.14f;
                     break;
                 case Difficulty.Dificil:
-                    reactionDelay      = 0.14f;
-                    missChance         = 0.04f;
-                    blockReactChance   = 0.68f;
-                    crouchReactChance  = 0.35f;
-                    comboChance        = 0.65f;
-                    specialMinInterval = 4.0f;
+                    reactionDelay        = 0.12f;
+                    hesitationChance     = 0.0f;
+                    missChance           = 0.03f;
+                    blockReactChance     = 0.72f;
+                    crouchReactChance    = 0.16f;
+                    defenseCheckInterval = 0.38f;
+                    comboChance          = 0.70f;
+                    specialMinInterval   = 3.4f;
+                    specialMidChance     = 0.65f;
+                    specialLongChance    = 0.58f;
+                    punishChance         = 0.78f;
+                    antiJumpChance       = 0.68f;
+                    meleeBlockChance     = 0.18f;
                     break;
             }
         }
@@ -213,11 +251,32 @@ namespace EcclesiaFighters
             // Reactive defense if opponent is swinging nearby
             if (defenseCheckCd <= 0f && IsIncomingAttackThreat(dist))
             {
-                defenseCheckCd = 0.75f;
+                defenseCheckCd = defenseCheckInterval;
                 float r = Random.value;
                 if (r < blockReactChance) return State.Block;
                 if (r < blockReactChance + crouchReactChance) return State.Crouch;
             }
+
+            // Anti-jump pressure & punish openings
+            FighterController opp = GetOpponent();
+            if (opp != null && !opp.IsDead)
+            {
+                if (!opp.IsGrounded && dist <= midRange && Random.value < antiJumpChance)
+                {
+                    if (dist <= closeRange + 0.45f)
+                        return Random.value < 0.60f ? State.Kick : State.LightPunch;
+                    if (CanUseRangedSpecial() && Random.value < 0.55f)
+                        return State.Special;
+                    return State.Approach;
+                }
+
+                if (opp.IsInHitstun && dist <= closeRange + 0.25f && Random.value < punishChance)
+                    return Random.value < 0.55f ? State.HeavyPunch : State.Kick;
+            }
+
+            // Intentional hesitation pause on lower tiers
+            if (hesitationChance > 0f && Random.value < hesitationChance)
+                return State.Idle;
 
             // Low-HP spacing
             if (self.HPRatio <= retreatHP && dist < closeRange * 1.1f && Random.value < 0.45f)
@@ -227,9 +286,10 @@ namespace EcclesiaFighters
             if (dist <= closeRange)
             {
                 float roll = Random.value;
-                if (roll < 0.14f) return State.Block;
-                if (roll < 0.24f) return State.Crouch;
-                if (roll < 0.30f && CanUseRangedSpecial()) return State.Special;
+                float crouchThreshold = meleeBlockChance + crouchReactChance * 0.40f;
+                if (roll < meleeBlockChance) return State.Block;
+                if (roll < crouchThreshold)  return State.Crouch;
+                if (roll < crouchThreshold + 0.08f && CanUseRangedSpecial()) return State.Special;
 
                 // Mix LightPunch, HeavyPunch, Kick, and CrouchPoke based on distance
                 if (dist <= 1.05f)
@@ -253,7 +313,7 @@ namespace EcclesiaFighters
             // 2) Mid Range: fire Special selectively or close the gap
             if (dist <= midRange)
             {
-                if (CanUseRangedSpecial() && Random.value < 0.52f)
+                if (CanUseRangedSpecial() && Random.value < specialMidChance)
                     return State.Special;
 
                 float r = Random.value;
@@ -263,7 +323,7 @@ namespace EcclesiaFighters
             }
 
             // 3) Long Range: close distance actively, or fire ranged Special
-            if (CanUseRangedSpecial() && Random.value < 0.40f)
+            if (CanUseRangedSpecial() && Random.value < specialLongChance)
                 return State.Special;
 
             return Random.value < 0.82f ? State.Approach : State.Jump;
@@ -274,7 +334,10 @@ namespace EcclesiaFighters
             switch (state)
             {
                 case State.Idle:
-                    yield return new WaitForSeconds(Random.Range(0.06f, 0.16f));
+                    float idleDur = difficulty == Difficulty.Facil
+                        ? Random.Range(0.28f, 0.48f)
+                        : Random.Range(0.06f, 0.16f);
+                    yield return new WaitForSeconds(idleDur);
                     break;
 
                 case State.Approach:
