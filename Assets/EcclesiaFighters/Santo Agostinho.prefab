@@ -196,23 +196,82 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   characterName: Santo Agostinho
-  isPlayer: 1
+  playerIndex: 0
+  isPlayerControlled: 1
   maxHP: 100
   moveSpeed: 4
+  backWalkSpeedMultiplier: 0.82
+  crouchSpeedMultiplier: 0.45
+  crouchHeightRatio: 0.6
   jumpForce: 7.5
-  punchDamage: 10
-  kickDamage: 14
+  ascentGravityMultiplier: 2.2
+  fallGravityMultiplier: 3
+  blockReduction: 0.15
+  blockKnockbackScale: 0.35
+  knockbackDamping: 18
+  invulnerabilityDuration: 0.22
+  stageMinX: -8.5
+  stageMaxX: 8.5
+  lightPunch:
+    damage: 8
+    startup: 0.07
+    active: 0.09
+    recovery: 0.14
+    cooldown: 0.08
+    range: 0.52
+    hitHalfExtents: {x: 0.32, y: 0.36, z: 0.6}
+    knockback: 2.2
+    hitstun: 0.18
+  heavyPunch:
+    damage: 15
+    startup: 0.16
+    active: 0.12
+    recovery: 0.26
+    cooldown: 0.18
+    range: 0.62
+    hitHalfExtents: {x: 0.37, y: 0.38, z: 0.6}
+    knockback: 5
+    hitstun: 0.32
+  kick:
+    damage: 13
+    startup: 0.13
+    active: 0.13
+    recovery: 0.24
+    cooldown: 0.15
+    range: 0.72
+    hitHalfExtents: {x: 0.42, y: 0.38, z: 0.6}
+    knockback: 5.8
+    hitstun: 0.28
+  facingMode: 0
   specialDamage: 38
   specialCooldown: 5
-  blockReduction: 0.15
+  specialStartup: 0.16
+  specialActive: 0.1
+  specialRecovery: 0.24
+  specialSpeed: 16
   specialPrefab: {fileID: 0}
   firePoint: {fileID: 0}
-  kLeft: 97
-  kRight: 100
-  kJump: 119
-  kBlock: 115
-  kPunch: 106
-  kKick: 107
-  kSpecial: 108
+  chestHeightRatio: 0.7
+  fallbackChestHeight: 1.3
+  muzzleForwardOffset: 0.55
+  lightPunchStartup: 0.11
+  heavyPunchStartup: 0.25
+  kickStartup: 0.24
+  specialSpawnDelay: 0.37
+  keyLeft: 97
+  keyRight: 100
+  keyJump: 119
+  keyJumpAlt: 32
+  keyCrouch: 115
+  keyBlock: 304
+  keyLightPunch: 106
+  keyHeavyPunch: 107
+  keyKick: 108
+  keySpecial1: 117
+  keySpecial2: 105
+  usePlaceholderVisuals: 1
+  visualRoot: {fileID: 0}
+  infiniteHP: 0
+  forceShowMoveHitboxes: 0
   opponent: {fileID: 0}
   hpBar: {fileID: 0}

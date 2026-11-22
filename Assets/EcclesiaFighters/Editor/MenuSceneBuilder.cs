@@ -263,18 +263,38 @@ namespace EcclesiaFighters.EditorTools
 
             // Burgundy header bar
             Image headerBar = AddFramedPanel(box.rectTransform, "HeaderBar", BurgundyPanel, AntiqueGold, false);
-            Region(headerBar.rectTransform, 0.025f, 0.855f, 0.975f, 0.972f);
+            Region(headerBar.rectTransform, 0.025f, 0.878f, 0.975f, 0.978f);
 
-            Text head = AddText(headerBar.rectTransform, "Heading", "CONFIGURAÇÕES", 48, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Text head = AddText(headerBar.rectTransform, "Heading", "CONFIGURAÇÕES", 44, BrightGold, TextAnchor.MiddleCenter, FontStyle.Bold);
             Region(head.rectTransform, 0.04f, 0.28f, 0.96f, 0.94f);
             AddStrongTextEffects(head, 2.5f, 3.5f);
 
-            Text subHead = AddText(headerBar.rectTransform, "SubHeading", "VÍDEO, EXIBIÇÃO E ÁUDIO", 20, IvoryMuted, TextAnchor.MiddleCenter, FontStyle.Italic);
-            Region(subHead.rectTransform, 0.04f, 0.06f, 0.96f, 0.30f);
+            Text subHead = AddText(headerBar.rectTransform, "SubHeading", "VÍDEO, EXIBIÇÃO E ÁUDIO", 19, IvoryMuted, TextAnchor.MiddleCenter, FontStyle.Italic);
+            Region(subHead.rectTransform, 0.04f, 0.04f, 0.96f, 0.30f);
 
-            // Two-column body
+            // Top tab bar (GERAL | CONTROLES)
+            RectTransform tabBar = NewRect("TabBar", box.rectTransform);
+            Region(tabBar, 0.26f, 0.812f, 0.74f, 0.868f);
+            var tabHlg = tabBar.gameObject.AddComponent<HorizontalLayoutGroup>();
+            tabHlg.spacing = 18f;
+            tabHlg.childControlWidth = true;
+            tabHlg.childControlHeight = true;
+            tabHlg.childForceExpandWidth = true;
+            tabHlg.childForceExpandHeight = true;
+
+            Button tabGeral = AddButton(tabBar, "Tab_Geral", "GERAL", 22, ButtonVariant.Compact);
+            tabGeral.navigation = new Navigation { mode = Navigation.Mode.None };
+            UnityEventTools.AddPersistentListener(tabGeral.onClick, settings.ShowGeneralTab);
+            tabGeral.GetComponent<UIButtonJuice>()?.SetSelected(true);
+
+            Button tabControles = AddButton(tabBar, "Tab_Controles", "CONTROLES", 22, ButtonVariant.Compact);
+            tabControles.navigation = new Navigation { mode = Navigation.Mode.None };
+            UnityEventTools.AddPersistentListener(tabControles.onClick, settings.ShowControlsTab);
+            tabControles.GetComponent<UIButtonJuice>()?.SetSelected(false);
+
+            // Two-column body (GERAL tab)
             RectTransform body = NewRect("BodyColumns", box.rectTransform);
-            Region(body, 0.025f, 0.155f, 0.975f, 0.835f);
+            Region(body, 0.025f, 0.148f, 0.975f, 0.802f);
             var bodyHlg = body.gameObject.AddComponent<HorizontalLayoutGroup>();
             bodyHlg.padding = new RectOffset(8, 8, 6, 6);
             bodyHlg.spacing = 24f;
@@ -289,8 +309,8 @@ namespace EcclesiaFighters.EditorTools
             leftLe.flexibleWidth = 1.08f;
 
             var leftVlg = leftCol.gameObject.AddComponent<VerticalLayoutGroup>();
-            leftVlg.padding = new RectOffset(22, 22, 18, 18);
-            leftVlg.spacing = 14f;
+            leftVlg.padding = new RectOffset(20, 20, 14, 14);
+            leftVlg.spacing = 12f;
             leftVlg.childAlignment = TextAnchor.UpperLeft;
             leftVlg.childControlWidth = true;
             leftVlg.childControlHeight = true;
@@ -386,8 +406,8 @@ namespace EcclesiaFighters.EditorTools
             rightLe.flexibleWidth = 1.0f;
 
             var rightVlg = rightCol.gameObject.AddComponent<VerticalLayoutGroup>();
-            rightVlg.padding = new RectOffset(22, 22, 18, 18);
-            rightVlg.spacing = 16f;
+            rightVlg.padding = new RectOffset(20, 20, 14, 14);
+            rightVlg.spacing = 14f;
             rightVlg.childAlignment = TextAnchor.UpperLeft;
             rightVlg.childControlWidth = true;
             rightVlg.childControlHeight = true;
@@ -430,11 +450,28 @@ namespace EcclesiaFighters.EditorTools
                 18, IvoryMuted, TextAnchor.MiddleLeft, FontStyle.Italic);
             SetLayoutElement(audioNote.gameObject, preferredHeight: 58f);
 
+            // Two-column CONTROLES tab (JOGADOR 1 | JOGADOR 2 — 9 rebindable actions)
+            RectTransform controlsBody = NewRect("ControlsColumns", box.rectTransform);
+            Region(controlsBody, 0.025f, 0.148f, 0.975f, 0.802f);
+            var ctrlHlg = controlsBody.gameObject.AddComponent<HorizontalLayoutGroup>();
+            ctrlHlg.padding = new RectOffset(8, 8, 6, 6);
+            ctrlHlg.spacing = 24f;
+            ctrlHlg.childControlWidth = true;
+            ctrlHlg.childControlHeight = true;
+            ctrlHlg.childForceExpandWidth = false;
+            ctrlHlg.childForceExpandHeight = true;
+
+            Button[] p1KeyBtns = BuildKeybindColumn(controlsBody, "P1ControlsColumn", "JOGADOR 1 (P1)", FaithBlue,   playerIdx: 0, settings);
+            Image ctrlSep = AddImage(controlsBody, "ControlsColumnDivider", new Color(0.84f, 0.67f, 0.27f, 0.35f), null, false);
+            SetLayoutElement(ctrlSep.gameObject, preferredWidth: 2f);
+            Button[] p2KeyBtns = BuildKeybindColumn(controlsBody, "P2ControlsColumn", "JOGADOR 2 (P2)", IdeoCrimson, playerIdx: 1, settings);
+            controlsBody.gameObject.SetActive(false);
+
             // Bottom divider & Action bar (RESET | VOLTAR | APLICAR)
-            AddDivider(box.rectTransform, "FooterDivider", AntiqueGold, 0.04f, 0.132f, 0.96f, 0.148f);
+            AddDivider(box.rectTransform, "FooterDivider", AntiqueGold, 0.04f, 0.132f, 0.96f, 0.146f);
 
             RectTransform footer = NewRect("FooterActions", box.rectTransform);
-            Region(footer, 0.025f, 0.025f, 0.975f, 0.125f);
+            Region(footer, 0.025f, 0.024f, 0.975f, 0.124f);
             var footHlg = footer.gameObject.AddComponent<HorizontalLayoutGroup>();
             footHlg.padding = new RectOffset(16, 16, 6, 6);
             footHlg.spacing = 18f;
@@ -461,6 +498,13 @@ namespace EcclesiaFighters.EditorTools
             UnityEventTools.AddPersistentListener(apply.onClick, settings.Apply);
 
             // SettingsManager wiring
+            settings.tabGeneralButton     = tabGeral;
+            settings.tabControlsButton    = tabControles;
+            settings.generalTabRoot       = body.gameObject;
+            settings.controlsTabRoot      = controlsBody.gameObject;
+            settings.subHeadingLabel      = subHead;
+            settings.p1KeyButtons         = p1KeyBtns;
+            settings.p2KeyButtons         = p2KeyBtns;
             settings.qualityButtons       = qBtns;
             settings.vsyncToggle          = vsync;
             settings.fullscreenToggle     = full;
@@ -475,6 +519,65 @@ namespace EcclesiaFighters.EditorTools
 
             panel.gameObject.SetActive(false);
             return panel.gameObject;
+        }
+
+        static Button[] BuildKeybindColumn(RectTransform parent, string name, string heading, Color accent, int playerIdx, SettingsManager settings)
+        {
+            Image col = AddFramedPanel(parent, name, CardSurface, MutedGold, false);
+            var colLe = col.gameObject.AddComponent<LayoutElement>();
+            colLe.flexibleWidth = 1.0f;
+
+            var vlg = col.gameObject.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(20, 20, 14, 14);
+            vlg.spacing = 6f;
+            vlg.childAlignment = TextAnchor.UpperLeft;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+
+            Text sec = AddText(col.rectTransform, "SectionHeading", heading, 23, accent, TextAnchor.MiddleLeft, FontStyle.Bold);
+            SetLayoutElement(sec.gameObject, preferredHeight: 30f);
+            AddLayoutDivider(col.rectTransform, "Divider", AntiqueGold);
+
+            var btns = new Button[KeybindManager.ActionCount];
+            for (int a = 0; a < KeybindManager.ActionCount; a++)
+            {
+                var action = (FighterAction)a;
+                Image row = AddFramedPanel(col.rectTransform, "BindRow_" + action, SlotDark, new Color(0.56f, 0.44f, 0.18f, 0.45f), false);
+                SetLayoutElement(row.gameObject, preferredHeight: 46f);
+
+                var rhlg = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+                rhlg.padding = new RectOffset(14, 10, 4, 4);
+                rhlg.spacing = 12f;
+                rhlg.childAlignment = TextAnchor.MiddleCenter;
+                rhlg.childControlWidth = true;
+                rhlg.childControlHeight = true;
+                rhlg.childForceExpandWidth = false;
+                rhlg.childForceExpandHeight = true;
+
+                Text actionLbl = AddText(row.rectTransform, "ActionLabel", SettingsManager.ActionLabelsPT[a], 19, Ivory, TextAnchor.MiddleLeft, FontStyle.Bold);
+                SetLayoutElement(actionLbl.gameObject, flexibleWidth: 1f);
+
+                string defKey = KeybindManager.GetPrettyKeyName(KeybindManager.GetDefaultKey(playerIdx, action));
+                Button keyBtn = AddButton(row.rectTransform, "KeyBtn_" + action, defKey, 18, ButtonVariant.Compact);
+                keyBtn.navigation = new Navigation { mode = Navigation.Mode.None };
+                SetLayoutElement(keyBtn.gameObject, preferredWidth: 230f);
+
+                var kTxt = keyBtn.GetComponentInChildren<Text>();
+                if (kTxt)
+                {
+                    kTxt.resizeTextForBestFit = true;
+                    kTxt.resizeTextMinSize    = 12;
+                    kTxt.resizeTextMaxSize    = 18;
+                }
+
+                if (playerIdx == 0) UnityEventTools.AddIntPersistentListener(keyBtn.onClick, settings.StartRebindP1, a);
+                else                UnityEventTools.AddIntPersistentListener(keyBtn.onClick, settings.StartRebindP2, a);
+
+                btns[a] = keyBtn;
+            }
+            return btns;
         }
 
         // ═════════════════════════════════════════════════════════════════════

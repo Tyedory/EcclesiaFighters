@@ -16,11 +16,14 @@ namespace EcclesiaFighters.EditorTools
     /// </summary>
     public static class SantoAnimatorSetup
     {
-        const string AnimDir        = "Assets/EcclesiaFighters/Animations/SantoAgostinho/";
-        const string BaseModelPath  = AnimDir + "SA.fbx";
-        const string ControllerPath = AnimDir + "SantoAgostinho.controller";
-        const string PrefabPath     = "Assets/Santo Agostinho Final.prefab";
-        const string SantoMatPath   = "Assets/Meshy_AI_The_Golden_Benedictio_1003123704_texture_fbx/Meshy_AI_The_Golden_Benedictio_1003123704_texture_fbx/Materials/Meshy_AI_The_Golden_Benedictio_1003123704_texture.mat";
+        const string AnimDir            = "Assets/EcclesiaFighters/Animations/SantoAgostinho/";
+        const string BaseModelPath      = AnimDir + "SA.fbx";
+        const string ControllerPath     = AnimDir + "SantoAgostinho.controller";
+        const string PrefabPath         = "Assets/Santo Agostinho Final.prefab";
+        const string KarlLightPunchPath = "Assets/EcclesiaFighters/Animations/KarlMarx/Punching Bag.fbx";
+        const string KarlBaseModelPath  = "Assets/EcclesiaFighters/Animations/KarlMarx/Karl marx.fbx";
+        const string CleanGoldMatPath   = AnimDir + "SantoAgostinho_SacredGold.mat";
+        const string CleanBurgundyMatPath = AnimDir + "SantoAgostinho_Burgundy.mat";
 
         const string VisualChildName = "SantoAgostinhoVisual";
 
@@ -102,9 +105,10 @@ namespace EcclesiaFighters.EditorTools
             AnimationClip blockClip = CreateStaticBlockClip(
                 blockRawClip, AnimDir + "SantoAgostinho_Block.anim");
 
-            // 4. Build SantoAgostinho.controller
+            // 4. Build SantoAgostinho.controller (reuse Karl's Humanoid single-jab Punching Bag.fbx for LightPunch)
             AnimationClip walkClip       = LoadPrimaryClip(AnimDir + "walking.fbx");
             AnimationClip crouchWalkClip = LoadPrimaryClip(AnimDir + "Crouched Walking.fbx");
+            AnimationClip lightPunchClip = EnsureKarlLightPunchClip() ?? LoadPrimaryClip(AnimDir + "Fist Fight A.fbx");
 
             AnimatorController controller = BuildAnimatorController(
                 idleClip:       LoadPrimaryClip(AnimDir + "idle.fbx"),
@@ -112,7 +116,7 @@ namespace EcclesiaFighters.EditorTools
                 crouchWalkClip: crouchWalkClip,
                 blockClip:      blockClip,
                 jumpClip:       LoadPrimaryClip(AnimDir + "jump.fbx"),
-                lightPunchClip: LoadPrimaryClip(AnimDir + "Fist Fight A.fbx"),
+                lightPunchClip: lightPunchClip,
                 heavyPunchClip: LoadPrimaryClip(AnimDir + "Standing 1H Magic Attack 01.fbx"),
                 kickClip:       LoadPrimaryClip(AnimDir + "Roundhouse Kick.fbx"),
                 specialClip:    LoadPrimaryClip(AnimDir + "Standing 2H Cast Spell 01.fbx"),
@@ -252,6 +256,58 @@ namespace EcclesiaFighters.EditorTools
             }
             Debug.LogWarning("[SantoAnimatorSetup] No AnimationClip found in: " + assetPath);
             return null;
+        }
+
+        /// <summary>
+        /// Reuses Karl's trimmed Humanoid Punching Bag.fbx single-jab clip via Unity Humanoid retargeting.
+        /// Ensures Humanoid rig & trim (frames 16..44) if not already imported as Humanoid.
+        /// </summary>
+        static AnimationClip EnsureKarlLightPunchClip()
+        {
+            if (!File.Exists(KarlLightPunchPath)) return null;
+
+            var imp = AssetImporter.GetAtPath(KarlLightPunchPath) as ModelImporter;
+            if (imp && imp.animationType != ModelImporterAnimationType.Human)
+            {
+                Avatar karlAv = AssetDatabase.LoadAssetAtPath<Avatar>(KarlBaseModelPath);
+                imp.animationType = ModelImporterAnimationType.Human;
+                if (karlAv)
+                {
+                    imp.avatarSetup  = ModelImporterAvatarSetup.CopyFromOther;
+                    imp.sourceAvatar = karlAv;
+                }
+                else
+                {
+                    imp.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
+                }
+                imp.importAnimation = true;
+                imp.SaveAndReimport();
+
+                ModelImporterClipAnimation[] clips = imp.clipAnimations;
+                if (clips == null || clips.Length == 0) clips = imp.defaultClipAnimations;
+                if (clips != null && clips.Length > 0)
+                {
+                    ModelImporterClipAnimation c = clips[0];
+                    float maxF = (imp.defaultClipAnimations != null && imp.defaultClipAnimations.Length > 0)
+                        ? imp.defaultClipAnimations[0].lastFrame : c.lastFrame;
+                    c.firstFrame              = Mathf.Clamp(16f, 0f, Mathf.Max(0f, maxF - 2f));
+                    c.lastFrame               = Mathf.Clamp(44f, c.firstFrame + 1f, Mathf.Max(1f, maxF));
+                    c.loopTime                = false;
+                    c.loopPose                = false;
+                    c.lockRootRotation        = true;
+                    c.keepOriginalOrientation = true;
+                    c.lockRootHeightY         = true;
+                    c.heightFromFeet          = true;
+                    c.keepOriginalPositionY   = false;
+                    c.heightOffset            = 0f;
+                    c.lockRootPositionXZ      = false;
+                    c.keepOriginalPositionXZ  = false;
+                    clips[0] = c;
+                    imp.clipAnimations = clips;
+                    imp.SaveAndReimport();
+                }
+            }
+            return LoadPrimaryClip(KarlLightPunchPath);
         }
 
         // ═════════════════════════════════════════════════════════════════════
@@ -406,7 +462,7 @@ namespace EcclesiaFighters.EditorTools
             AnimatorState stCrouchWalkBack = AddState(sm, "CrouchWalkBack",    crouchWalkClip,-1.00f, new Vector3(520, 270));
 
             AnimatorState stJump           = AddState(sm, "Jump",              jumpClip,       0.25f, new Vector3(-20, -120));
-            AnimatorState stLightPunch     = AddState(sm, "LightPunch",        lightPunchClip, 1.75f, new Vector3(-20, -40));
+            AnimatorState stLightPunch     = AddState(sm, "LightPunch",        lightPunchClip, 1.70f, new Vector3(-20, -40));
             AnimatorState stHeavyPunch     = AddState(sm, "HeavyPunch",        heavyPunchClip, 1.80f, new Vector3(-20, 30));
             AnimatorState stKick           = AddState(sm, "Kick",              kickClip,       1.90f, new Vector3(-20, 100));
             AnimatorState stSpecial        = AddState(sm, "Special",           specialClip,    2.00f, new Vector3(-20, 170));
@@ -535,8 +591,6 @@ namespace EcclesiaFighters.EditorTools
             GameObject root = PrefabUtility.LoadPrefabContents(PrefabPath);
             try
             {
-                Material preservedMat = FindExistingMaterial(root) ?? AssetDatabase.LoadAssetAtPath<Material>(SantoMatPath);
-
                 if (PrefabUtility.IsPartOfPrefabInstance(root))
                     PrefabUtility.UnpackPrefabInstance(root, PrefabUnpackMode.OutermostRoot, InteractionMode.AutomatedAction);
 
@@ -561,18 +615,18 @@ namespace EcclesiaFighters.EditorTools
                 foreach (AudioListener l in visualGo.GetComponentsInChildren<AudioListener>(true)) l.enabled = false;
                 foreach (Light lt in visualGo.GetComponentsInChildren<Light>(true))            lt.gameObject.SetActive(false);
 
-                if (preservedMat)
+                // Replace missing, default, or mismatched Meshy static UV textures with clean untextured Sacred Gold / Burgundy
+                Material cleanGold     = GetOrCreateCleanSantoMaterial(CleanGoldMatPath,     new Color(0.80f, 0.62f, 0.27f, 1f), metallic: 0.18f, smoothness: 0.40f);
+                Material cleanBurgundy = GetOrCreateCleanSantoMaterial(CleanBurgundyMatPath, new Color(0.45f, 0.09f, 0.14f, 1f), metallic: 0.08f, smoothness: 0.30f);
+                foreach (Renderer r in visualGo.GetComponentsInChildren<Renderer>(true))
                 {
-                    foreach (Renderer r in visualGo.GetComponentsInChildren<Renderer>(true))
+                    Material[] mats = r.sharedMaterials;
+                    for (int i = 0; i < mats.Length; i++)
                     {
-                        Material[] mats = r.sharedMaterials;
-                        for (int i = 0; i < mats.Length; i++)
-                        {
-                            if (mats[i] == null || mats[i].mainTexture == null)
-                                mats[i] = preservedMat;
-                        }
-                        r.sharedMaterials = mats;
+                        if (NeedsCleanSantoMaterial(mats[i]))
+                            mats[i] = (i % 2 == 0) ? cleanGold : cleanBurgundy;
                     }
+                    r.sharedMaterials = mats;
                 }
 
                 FitVisualToCapsule(root, visualGo.transform);
@@ -601,13 +655,13 @@ namespace EcclesiaFighters.EditorTools
                     fc.ascentGravityMultiplier = 2.2f;
                     fc.fallGravityMultiplier   = 3.0f;
 
-                    // Sync hitboxes & special throw spawn to trimmed/sped-up mixamo peaks
-                    fc.lightPunchStartup   = 0.14f;
+                    // Sync hitboxes & special throw spawn to trimmed/sped-up Humanoid peaks
+                    fc.lightPunchStartup   = 0.11f;
                     fc.heavyPunchStartup   = 0.23f;
                     fc.kickStartup         = 0.21f;
                     fc.specialSpawnDelay   = 0.36f;
 
-                    fc.lightPunch.startup         = 0.14f;
+                    fc.lightPunch.startup         = 0.11f;
                     fc.lightPunch.active          = 0.09f;
                     fc.lightPunch.recovery        = 0.14f;
                     fc.lightPunch.range           = 0.52f;
@@ -640,19 +694,40 @@ namespace EcclesiaFighters.EditorTools
             }
         }
 
-        static Material FindExistingMaterial(GameObject root)
+        static bool NeedsCleanSantoMaterial(Material mat)
         {
-            foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true))
+            if (!mat) return true;
+            if (mat.mainTexture == null) return true;
+            string path = AssetDatabase.GetAssetPath(mat);
+            if (!string.IsNullOrEmpty(path) && path.IndexOf("Meshy_AI_The_Golden_Benedictio", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (mat.name.IndexOf("Meshy_AI_The_Golden_Benedictio", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            return false;
+        }
+
+        static Material GetOrCreateCleanSantoMaterial(string assetPath, Color color, float metallic, float smoothness)
+        {
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(assetPath);
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            if (!mat)
             {
-                if (r && r.sharedMaterial && r.sharedMaterial.mainTexture != null)
-                    return r.sharedMaterial;
+                mat = new Material(shader);
+                AssetDatabase.CreateAsset(mat, assetPath);
             }
-            foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true))
+            else if (mat.shader != shader)
             {
-                if (r && r.sharedMaterial)
-                    return r.sharedMaterial;
+                mat.shader = shader;
             }
-            return null;
+
+            mat.mainTexture = null;
+            mat.color       = color;
+            if (mat.HasProperty("_BaseColor"))  mat.SetColor("_BaseColor", color);
+            if (mat.HasProperty("_Metallic"))   mat.SetFloat("_Metallic", metallic);
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
+            if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", smoothness);
+            EditorUtility.SetDirty(mat);
+            return mat;
         }
 
         static void FitVisualToCapsule(GameObject root, Transform visual)

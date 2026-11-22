@@ -223,7 +223,9 @@ MonoBehaviour:
   backWalkSpeedMultiplier: 0.82
   crouchSpeedMultiplier: 0.45
   crouchHeightRatio: 0.6
-  jumpForce: 7.5
+  jumpForce: 11.2
+  ascentGravityMultiplier: 2.2
+  fallGravityMultiplier: 3
   blockReduction: 0.15
   blockKnockbackScale: 0.35
   knockbackDamping: 18
@@ -236,8 +238,8 @@ MonoBehaviour:
     active: 0.09
     recovery: 0.14
     cooldown: 0.08
-    range: 0.85
-    hitHalfExtents: {x: 0.55, y: 0.4, z: 0.75}
+    range: 0.52
+    hitHalfExtents: {x: 0.32, y: 0.36, z: 0.6}
     knockback: 2.2
     hitstun: 0.18
   heavyPunch:
@@ -246,8 +248,8 @@ MonoBehaviour:
     active: 0.12
     recovery: 0.2
     cooldown: 0.18
-    range: 1.05
-    hitHalfExtents: {x: 0.65, y: 0.42, z: 0.75}
+    range: 0.62
+    hitHalfExtents: {x: 0.37, y: 0.38, z: 0.6}
     knockback: 5
     hitstun: 0.32
   kick:
@@ -256,8 +258,8 @@ MonoBehaviour:
     active: 0.13
     recovery: 0.18
     cooldown: 0.15
-    range: 1.25
-    hitHalfExtents: {x: 0.75, y: 0.42, z: 0.75}
+    range: 0.72
+    hitHalfExtents: {x: 0.42, y: 0.38, z: 0.6}
     knockback: 5.8
     hitstun: 0.28
   facingMode: 0
