@@ -63,6 +63,15 @@ namespace EcclesiaFighters
         public AudioCue voVictory    = new AudioCue(null, 1.00f);
         public AudioCue voDefeat     = new AudioCue(null, 1.00f);
 
+        [Header("Announcer Voices (PT-BR)")]
+        public AudioCue vopRound1         = new AudioCue(null, 1.00f);
+        public AudioCue vopRound2         = new AudioCue(null, 1.00f);
+        public AudioCue vopRoundFinal     = new AudioCue(null, 1.00f);
+        public AudioCue vopVitoria        = new AudioCue(null, 1.00f);
+        public AudioCue vopDerrota        = new AudioCue(null, 1.00f);
+        public AudioCue vopIgrejaVence    = new AudioCue(null, 1.00f);
+        public AudioCue vopComunismoVence = new AudioCue(null, 1.00f);
+
         public bool HasAllClipsAssigned()
         {
             return bgmTitleScreen.clip != null
@@ -91,7 +100,14 @@ namespace EcclesiaFighters
                 && voFight.clip      != null
                 && voKo.clip         != null
                 && voVictory.clip    != null
-                && voDefeat.clip     != null;
+                && voDefeat.clip     != null
+                && vopRound1.clip         != null
+                && vopRound2.clip         != null
+                && vopRoundFinal.clip     != null
+                && vopVitoria.clip        != null
+                && vopDerrota.clip        != null
+                && vopIgrejaVence.clip    != null
+                && vopComunismoVence.clip != null;
         }
     }
 }

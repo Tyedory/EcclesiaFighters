@@ -63,6 +63,17 @@ namespace EcclesiaFighters
 
         bool      initialized;
         Coroutine duckRoutine;
+        Coroutine voiceChainRoutine;
+
+        public static bool IsVoicePlaying
+        {
+            get
+            {
+                if (!HasInstance || instance == null) return false;
+                if (instance.voiceChainRoutine != null) return true;
+                return instance.voiceSource != null && instance.voiceSource.isPlaying;
+            }
+        }
 
         int   lastUiSfxFrame   = -1;
         int   lastUiPriority   = 0;
@@ -152,9 +163,19 @@ namespace EcclesiaFighters
 
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            StopVoiceChain();
             SilenceLegacySceneBgmSources();
             RefreshVolumesFromPrefs();
             RouteSceneMusic(scene.name);
+        }
+
+        void StopVoiceChain()
+        {
+            if (voiceChainRoutine != null)
+            {
+                StopCoroutine(voiceChainRoutine);
+                voiceChainRoutine = null;
+            }
         }
 
         /// <summary>
@@ -347,15 +368,43 @@ namespace EcclesiaFighters
             PlaySFXInternal(cue);
         }
 
-        void PlayVoiceInternal(AudioCue cue)
+        void PlayVoiceInternal(AudioCue cue, bool stopExistingChain = true)
         {
+            if (stopExistingChain) StopVoiceChain();
             if (!cue.IsValid) return;
             EnsureChannels();
             currentVoiceScale = cue.EffectiveScale;
             RecalculateSourceVolumes();
-            voiceSource.Stop();
-            voiceSource.clip = cue.clip;
-            voiceSource.Play();
+            if (voiceSource != null)
+            {
+                voiceSource.Stop();
+                voiceSource.clip = cue.clip;
+                voiceSource.Play();
+            }
+        }
+
+        IEnumerator PlayChainedVoicesRoutine(AudioCue first, AudioCue second)
+        {
+            if (first.IsValid)
+            {
+                PlayVoiceInternal(first, stopExistingChain: false);
+                float clipDur = first.clip != null ? first.clip.length : 0f;
+                float waited = 0f;
+                // Wait cleanly on unscaled time until first announcer line finishes (with bounded safety)
+                while (waited < Mathf.Max(0.25f, clipDur + 0.35f))
+                {
+                    if (voiceSource == null) break;
+                    if (!voiceSource.isPlaying && waited >= Mathf.Max(0.15f, clipDur * 0.85f))
+                        break;
+                    waited += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+            }
+
+            if (second.IsValid)
+                PlayVoiceInternal(second, stopExistingChain: false);
+
+            voiceChainRoutine = null;
         }
 
         // ══════════════════════════════════════════════════════
@@ -431,15 +480,26 @@ namespace EcclesiaFighters
             if (am == null || lib == null) return;
 
             AudioCue cue;
-            if (isFinalRound || roundNumber >= 3) cue = lib.voFinalRound;
-            else if (roundNumber == 2)            cue = lib.voRound2;
-            else                                  cue = lib.voRound1;
+            if (LocalizationManager.IsEnglish)
+            {
+                if (isFinalRound || roundNumber >= 3) cue = lib.voFinalRound;
+                else if (roundNumber == 2)            cue = lib.voRound2;
+                else                                  cue = lib.voRound1;
+            }
+            else
+            {
+                if (isFinalRound || roundNumber >= 3) cue = lib.vopRoundFinal;
+                else if (roundNumber == 2)            cue = lib.vopRound2;
+                else                                  cue = lib.vopRound1;
+            }
 
             am.PlayVoiceInternal(cue);
         }
 
         public static void PlayFightVoice()
         {
+            // PT-BR leaves Fight! cue silent; EN plays vo_Fight.wav
+            if (!LocalizationManager.IsEnglish) return;
             var am = Instance;
             AudioLibrary lib = am != null ? am.GetLib() : null;
             if (am != null && lib != null) am.PlayVoiceInternal(lib.voFight);
@@ -458,13 +518,35 @@ namespace EcclesiaFighters
 
         public static void PlayMatchEnd(bool victory)
         {
+            PlayMatchEnd(victory, isSoloHumanVsAI: true, churchWon: true);
+        }
+
+        public static void PlayMatchEnd(bool victory, bool isSoloHumanVsAI, bool churchWon)
+        {
             var am = Instance;
             AudioLibrary lib = am != null ? am.GetLib() : null;
             if (am == null || lib == null) return;
 
+            am.StopVoiceChain();
             am.DuckBGM(0.22f, fadeDownDur: 0.25f, holdDur: -1f);
             am.PlaySFXInternal(victory ? lib.sfxVictory : lib.sfxDefeat);
-            am.PlayVoiceInternal(victory ? lib.voVictory : lib.voDefeat);
+
+            if (LocalizationManager.IsEnglish)
+            {
+                am.PlayVoiceInternal(victory ? lib.voVictory : lib.voDefeat);
+                return;
+            }
+
+            AudioCue factionCue = churchWon ? lib.vopIgrejaVence : lib.vopComunismoVence;
+            if (isSoloHumanVsAI)
+            {
+                AudioCue resultCue = victory ? lib.vopVitoria : lib.vopDerrota;
+                am.voiceChainRoutine = am.StartCoroutine(am.PlayChainedVoicesRoutine(resultCue, factionCue));
+            }
+            else
+            {
+                am.PlayVoiceInternal(factionCue);
+            }
         }
     }
 }

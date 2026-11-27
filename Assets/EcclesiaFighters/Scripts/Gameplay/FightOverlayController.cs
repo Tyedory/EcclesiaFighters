@@ -118,8 +118,29 @@ namespace EcclesiaFighters
             }
         }
 
+        void OnEnable()
+        {
+            LocalizationManager.OnLanguageChanged += OnLanguageChanged;
+        }
+
+        void OnLanguageChanged(GameLanguage _)
+        {
+            if (IsPreFightOpen && preFightRoot != null)
+                BuildOrRebuildPreFightSplash();
+            if (pauseRoot != null)
+            {
+                bool wasOpen = IsPaused && pauseRoot.activeSelf;
+                Destroy(pauseRoot);
+                pauseRoot = null;
+                EnsurePauseMenuBuilt();
+                SyncAudioSlidersFromPrefs();
+                if (pauseRoot != null) pauseRoot.SetActive(wasOpen);
+            }
+        }
+
         void OnDisable()
         {
+            LocalizationManager.OnLanguageChanged -= OnLanguageChanged;
             if (audioDirty)
             {
                 PlayerPrefs.Save();
@@ -293,12 +314,10 @@ namespace EcclesiaFighters
             bool p1IsAI = PlayerPrefs.GetInt("P1IsAI", 0) == 1;
             bool p2IsAI = PlayerPrefs.GetInt("P2IsAI", 1) == 1;
 
-            int idxA = Mathf.Clamp(PlayerPrefs.GetInt("SelectedCharA", 0), 0, FighterNamesFallback.Length - 1);
-            int idxB = Mathf.Clamp(PlayerPrefs.GetInt("SelectedCharB", 1), 0, FighterNamesFallback.Length - 1);
-            string nameA = (mgr && mgr.FighterA && !string.IsNullOrEmpty(mgr.FighterA.characterName))
-                ? mgr.FighterA.characterName : FighterNamesFallback[idxA];
-            string nameB = (mgr && mgr.FighterB && !string.IsNullOrEmpty(mgr.FighterB.characterName))
-                ? mgr.FighterB.characterName : FighterNamesFallback[idxB];
+            int idxA = Mathf.Clamp(PlayerPrefs.GetInt("SelectedCharA", 0), 0, 1);
+            int idxB = Mathf.Clamp(PlayerPrefs.GetInt("SelectedCharB", 1), 0, 1);
+            string nameA = LocalizationManager.GetFighterName(idxA);
+            string nameB = LocalizationManager.GetFighterName(idxB);
 
             bool isAiVsAi = p1IsAI && p2IsAI;
             bool is2P     = !p1IsAI && !p2IsAI;
@@ -329,25 +348,26 @@ namespace EcclesiaFighters
 
             string titleText;
             string subtitleText;
+            string aiWord = LocalizationManager.Pick("IA", "AI");
             if (isAiVsAi)
             {
-                titleText    = "MODO ESPECTADOR — IA vs IA";
+                titleText    = LocalizationManager.Pick("MODO ESPECTADOR — IA vs IA", "SPECTATOR MODE — AI vs AI");
                 subtitleText = $"{nameA.ToUpper()}  VS  {nameB.ToUpper()}";
             }
             else if (is2P)
             {
-                titleText    = "CONTROLES DA LUTA";
-                subtitleText = $"DUELO LOCAL 2P  ·  {nameA.ToUpper()}  VS  {nameB.ToUpper()}";
+                titleText    = LocalizationManager.Pick("CONTROLES DA LUTA", "FIGHT CONTROLS");
+                subtitleText = $"{LocalizationManager.Pick("DUELO LOCAL 2P", "2P LOCAL DUEL")}  ·  {nameA.ToUpper()}  VS  {nameB.ToUpper()}";
             }
             else if (!p1IsAI)
             {
-                titleText    = "CONTROLES DA LUTA";
-                subtitleText = $"JOGADOR 1  ·  {nameA.ToUpper()}  VS  IA";
+                titleText    = LocalizationManager.Pick("CONTROLES DA LUTA", "FIGHT CONTROLS");
+                subtitleText = $"{LocalizationManager.Pick("JOGADOR 1", "PLAYER 1")}  ·  {nameA.ToUpper()}  VS  {aiWord}";
             }
             else
             {
-                titleText    = "CONTROLES DA LUTA";
-                subtitleText = $"IA  VS  JOGADOR 2  ·  {nameB.ToUpper()}";
+                titleText    = LocalizationManager.Pick("CONTROLES DA LUTA", "FIGHT CONTROLS");
+                subtitleText = $"{aiWord}  VS  {LocalizationManager.Pick("JOGADOR 2", "PLAYER 2")}  ·  {nameB.ToUpper()}";
             }
 
             Text title = CreateLabel("Title", card.transform, titleText, 30, FontStyle.Bold, ColBrightGold, TextAnchor.MiddleCenter);
@@ -381,7 +401,9 @@ namespace EcclesiaFighters
                 boxVlg.childForceExpandHeight = false;
 
                 Text note = CreateLabel("SpectatorNote", box.transform,
-                    "Ambos os lutadores são controlados pela Inteligência Artificial.",
+                    LocalizationManager.Pick(
+                        "Ambos os lutadores são controlados pela Inteligência Artificial.",
+                        "Both fighters are controlled by Artificial Intelligence."),
                     18, FontStyle.Bold, ColIvory, TextAnchor.MiddleCenter);
                 note.horizontalOverflow   = HorizontalWrapMode.Wrap;
                 note.verticalOverflow     = VerticalWrapMode.Truncate;
@@ -390,8 +412,8 @@ namespace EcclesiaFighters
                 note.resizeTextMaxSize    = 18;
                 SetLayoutHeight(note.gameObject, 48f);
 
-                CreateKeyRow(box.transform, "Pausar / Opções",       "ESC", 180f);
-                CreateKeyRow(box.transform, "Ocultar / Exibir Dicas", "TAB", 180f);
+                CreateKeyRow(box.transform, LocalizationManager.Pick("Pausar / Opções", "Pause / Options"), "ESC", 180f);
+                CreateKeyRow(box.transform, LocalizationManager.Pick("Ocultar / Exibir Dicas", "Hide / Show Hints"), "TAB", 180f);
             }
             else if (is2P)
             {
@@ -408,13 +430,15 @@ namespace EcclesiaFighters
                 hlg.childForceExpandWidth  = true;
                 hlg.childForceExpandHeight = true;
 
-                BuildPlayerControlsColumn(cols.transform, 0, $"JOGADOR 1  ·  {nameA.ToUpper()}", ColFaithBlue,  210f, 16);
-                BuildPlayerControlsColumn(cols.transform, 1, $"JOGADOR 2  ·  {nameB.ToUpper()}", ColIdeoCrimson, 210f, 16);
+                BuildPlayerControlsColumn(cols.transform, 0, $"{LocalizationManager.Pick("JOGADOR 1", "PLAYER 1")}  ·  {nameA.ToUpper()}", ColFaithBlue,  210f, 16);
+                BuildPlayerControlsColumn(cols.transform, 1, $"{LocalizationManager.Pick("JOGADOR 2", "PLAYER 2")}  ·  {nameB.ToUpper()}", ColIdeoCrimson, 210f, 16);
             }
             else
             {
                 int humanIdx   = !p1IsAI ? 0 : 1;
-                string pLabel  = humanIdx == 0 ? $"JOGADOR 1  ·  {nameA.ToUpper()}" : $"JOGADOR 2  ·  {nameB.ToUpper()}";
+                string pLabel  = humanIdx == 0
+                    ? $"{LocalizationManager.Pick("JOGADOR 1", "PLAYER 1")}  ·  {nameA.ToUpper()}"
+                    : $"{LocalizationManager.Pick("JOGADOR 2", "PLAYER 2")}  ·  {nameB.ToUpper()}";
                 Color colHdr   = humanIdx == 0 ? ColFaithBlue : ColIdeoCrimson;
 
                 GameObject col = BuildPlayerControlsColumn(card.transform, humanIdx, pLabel, colHdr, 220f, 17);
@@ -426,7 +450,9 @@ namespace EcclesiaFighters
             if (!isAiVsAi)
             {
                 Text footer = CreateLabel("FooterHint", card.transform,
-                    "ESC: Pausar   ·   TAB: Ocultar Dicas   ·   ENTER ou ESPAÇO para iniciar",
+                    LocalizationManager.Pick(
+                        "ESC: Pausar   ·   TAB: Ocultar Dicas   ·   ENTER ou ESPAÇO para iniciar",
+                        "ESC: Pause   ·   TAB: Hide Hints   ·   ENTER or SPACE to start"),
                     14, FontStyle.Bold, ColIvoryMuted, TextAnchor.MiddleCenter);
                 footer.resizeTextForBestFit = true;
                 footer.resizeTextMinSize    = 11;
@@ -436,7 +462,7 @@ namespace EcclesiaFighters
             else
             {
                 Text footer = CreateLabel("FooterHint", card.transform,
-                    "Pressione ENTER ou ESPAÇO para iniciar",
+                    LocalizationManager.Pick("Pressione ENTER ou ESPAÇO para iniciar", "Press ENTER or SPACE to start"),
                     14, FontStyle.Bold, ColIvoryMuted, TextAnchor.MiddleCenter);
                 SetLayoutHeight(footer.gameObject, 22f);
             }
@@ -451,7 +477,8 @@ namespace EcclesiaFighters
             brHlg.childForceExpandWidth  = false;
             brHlg.childForceExpandHeight = false;
 
-            Button startBtn = CreateActionButton(btnRow.transform, "ENTENDI / INICIAR LUTA",
+            Button startBtn = CreateActionButton(btnRow.transform,
+                LocalizationManager.Pick("ENTENDI / INICIAR LUTA", "GOT IT / START FIGHT"),
                 ColAntiqueGold, ColBrightGold, ColInkDark, 400f, 56f, 19, DismissPreFightSplash);
             startBtn.GetComponent<LayoutElement>().preferredWidth = 400f;
         }
@@ -482,16 +509,16 @@ namespace EcclesiaFighters
             string crouchKey = KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Crouch));
             string blockKey  = KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Block));
 
-            CreateKeyRow(panel.transform, "Mover",             $"{leftKey} / {rightKey}",    badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Correr (2x Esq/Dir)", $"2x {leftKey} / {rightKey}", badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Pular",             KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Jump)),       badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Agachar",           crouchKey, badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Defender",          blockKey,  badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Soco Leve",         KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.LightPunch)), badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Soco Forte",        KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.HeavyPunch)), badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Chute",             KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Kick)),       badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Especial",          KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Special)),    badgeWidth, badgeMaxFont);
-            CreateKeyRow(panel.transform, "Carregar Especial", $"{blockKey} + {crouchKey}", badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, LocalizationManager.Pick("Mover", "Move"),                   $"{leftKey} / {rightKey}",    badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, LocalizationManager.Pick("Correr (2x Esq/Dir)", "Sprint (2x Left/Right)"), $"2x {leftKey} / {rightKey}", badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, LocalizationManager.GetActionLabel(FighterAction.Jump),       KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Jump)),       badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, LocalizationManager.GetActionLabel(FighterAction.Crouch),     crouchKey, badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, LocalizationManager.GetActionLabel(FighterAction.Block),      blockKey,  badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, LocalizationManager.GetActionLabel(FighterAction.LightPunch), KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.LightPunch)), badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, LocalizationManager.GetActionLabel(FighterAction.HeavyPunch), KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.HeavyPunch)), badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, LocalizationManager.GetActionLabel(FighterAction.Kick),       KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Kick)),       badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, LocalizationManager.GetActionLabel(FighterAction.Special),    KeybindManager.GetPrettyKeyName(KeybindManager.GetKey(playerIndex, FighterAction.Special)),    badgeWidth, badgeMaxFont);
+            CreateKeyRow(panel.transform, LocalizationManager.Pick("Carregar Especial", "Charge Special"), $"{blockKey} + {crouchKey}", badgeWidth, badgeMaxFont);
 
             return panel;
         }
@@ -560,10 +587,10 @@ namespace EcclesiaFighters
             cardVlg.childForceExpandWidth  = true;
             cardVlg.childForceExpandHeight = false;
 
-            Text title = CreateLabel("PauseTitle", card.transform, "PAUSADO", 34, FontStyle.Bold, ColBrightGold, TextAnchor.MiddleCenter);
+            Text title = CreateLabel("PauseTitle", card.transform, LocalizationManager.Pick("PAUSADO", "PAUSED"), 34, FontStyle.Bold, ColBrightGold, TextAnchor.MiddleCenter);
             SetLayoutHeight(title.gameObject, 42f);
 
-            Text sub = CreateLabel("PauseSub", card.transform, "ESC para retomar o combate", 14, FontStyle.Bold, ColIvoryMuted, TextAnchor.MiddleCenter);
+            Text sub = CreateLabel("PauseSub", card.transform, LocalizationManager.Pick("ESC para retomar o combate", "ESC to resume combat"), 14, FontStyle.Bold, ColIvoryMuted, TextAnchor.MiddleCenter);
             SetLayoutHeight(sub.gameObject, 22f);
 
             CreateDivider(card.transform);
@@ -581,13 +608,13 @@ namespace EcclesiaFighters
             audioVlg.childForceExpandWidth  = true;
             audioVlg.childForceExpandHeight = false;
 
-            Text audioTitle = CreateLabel("AudioHeader", audioBox.transform, "ÁUDIO", 15, FontStyle.Bold, ColBrightGold, TextAnchor.MiddleLeft);
+            Text audioTitle = CreateLabel("AudioHeader", audioBox.transform, LocalizationManager.Pick("ÁUDIO", "AUDIO"), 15, FontStyle.Bold, ColBrightGold, TextAnchor.MiddleLeft);
             SetLayoutHeight(audioTitle.gameObject, 22f);
 
-            (masterSlider, masterPctTxt) = CreateVolumeRow(audioBox.transform, "Geral",   SettingsStore.KMaster);
-            (musicSlider,  musicPctTxt)  = CreateVolumeRow(audioBox.transform, "Música",  SettingsStore.KMusic);
-            (sfxSlider,    sfxPctTxt)    = CreateVolumeRow(audioBox.transform, "Efeitos", SettingsStore.KSfx);
-            (voiceSlider,  voicePctTxt)  = CreateVolumeRow(audioBox.transform, "Vozes",   SettingsStore.KVoice);
+            (masterSlider, masterPctTxt) = CreateVolumeRow(audioBox.transform, LocalizationManager.Pick("Geral",   "Master"), SettingsStore.KMaster);
+            (musicSlider,  musicPctTxt)  = CreateVolumeRow(audioBox.transform, LocalizationManager.Pick("Música",  "Music"),  SettingsStore.KMusic);
+            (sfxSlider,    sfxPctTxt)    = CreateVolumeRow(audioBox.transform, LocalizationManager.Pick("Efeitos", "SFX"),    SettingsStore.KSfx);
+            (voiceSlider,  voicePctTxt)  = CreateVolumeRow(audioBox.transform, LocalizationManager.Pick("Vozes",   "Voices"), SettingsStore.KVoice);
 
             // Spacer between audio box and action buttons
             var spacer = new GameObject("Spacer", typeof(RectTransform));
@@ -596,17 +623,17 @@ namespace EcclesiaFighters
             spLe.preferredHeight = 4f;
             spLe.flexibleHeight  = 1f;
 
-            // Four Portuguese Action Buttons
-            CreateActionButton(card.transform, "CONTINUAR",
+            // Four Action Buttons
+            CreateActionButton(card.transform, LocalizationManager.Pick("CONTINUAR", "RESUME"),
                 ColAntiqueGold, ColBrightGold, ColInkDark, 0f, 50f, 18, Resume);
 
-            CreateActionButton(card.transform, "REINICIAR LUTA",
+            CreateActionButton(card.transform, LocalizationManager.Pick("REINICIAR LUTA", "RESTART FIGHT"),
                 ColBurgundy, ColAntiqueGold, ColIvory, 0f, 50f, 17, () => { AudioManager.PlayUIConfirm(); LoadCleanScene("FightScene"); });
 
-            CreateActionButton(card.transform, "SELEÇÃO DE PERSONAGENS",
+            CreateActionButton(card.transform, LocalizationManager.Pick("SELEÇÃO DE PERSONAGENS", "CHARACTER SELECT"),
                 ColCardSurface, ColAntiqueGold, ColIvory, 0f, 50f, 17, () => { AudioManager.PlayUIBack(); LoadCleanScene("CharSelect"); });
 
-            CreateActionButton(card.transform, "MENU PRINCIPAL",
+            CreateActionButton(card.transform, LocalizationManager.Pick("MENU PRINCIPAL", "MAIN MENU"),
                 ColCrimsonDark, ColMutedGold, ColIvory, 0f, 50f, 17, () => { AudioManager.PlayUIBack(); LoadCleanScene("TitleScreen"); });
 
             pauseRoot.SetActive(false);

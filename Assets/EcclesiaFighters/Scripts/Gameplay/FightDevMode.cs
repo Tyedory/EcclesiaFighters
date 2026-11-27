@@ -76,6 +76,28 @@ namespace EcclesiaFighters
             mgr = sceneManager;
         }
 
+        void OnEnable()
+        {
+            LocalizationManager.OnLanguageChanged += OnLanguageChanged;
+        }
+
+        void OnLanguageChanged(GameLanguage _)
+        {
+            if (canvasGO != null)
+            {
+                bool wasOpen = panelOpen;
+                Destroy(canvasGO);
+                canvasGO = null;
+                uiBuilt  = false;
+                if (wasOpen)
+                {
+                    BuildOverlayUI();
+                    canvasGO.SetActive(true);
+                    RefreshUIState();
+                }
+            }
+        }
+
         void Awake()
         {
             if (!mgr) mgr = GetComponent<FightSceneManager>();
@@ -128,6 +150,7 @@ namespace EcclesiaFighters
 
         void OnDisable()
         {
+            LocalizationManager.OnLanguageChanged -= OnLanguageChanged;
             Time.timeScale = 1f;
             SyncMoveHitboxFlag(mgr ? mgr.FighterA : null, forceFalse: true);
             SyncMoveHitboxFlag(mgr ? mgr.FighterB : null, forceFalse: true);
@@ -431,11 +454,17 @@ namespace EcclesiaFighters
             var aiB  = b ? b.GetComponent<FighterAI>() : null;
             bool aiOnA = a && !a.isPlayerControlled && aiA && aiA.enabled;
             bool aiOnB = b && !b.isPlayerControlled && aiB && aiB.enabled;
-            SetToggleStyle(aiP1ToggleBtn, aiP1ToggleLbl, aiOnA, "AI P1: ON", "AI P1: OFF");
-            SetToggleStyle(aiP2ToggleBtn, aiP2ToggleLbl, aiOnB, "AI P2: ON", "AI P2: OFF");
+            SetToggleStyle(aiP1ToggleBtn, aiP1ToggleLbl, aiOnA,
+                LocalizationManager.Pick("IA J1: ON",  "AI P1: ON"),
+                LocalizationManager.Pick("IA J1: OFF", "AI P1: OFF"));
+            SetToggleStyle(aiP2ToggleBtn, aiP2ToggleLbl, aiOnB,
+                LocalizationManager.Pick("IA J2: ON",  "AI P2: ON"),
+                LocalizationManager.Pick("IA J2: OFF", "AI P2: OFF"));
 
             // Timer Freeze
-            SetToggleStyle(freezeTimerBtn, freezeTimerLbl, mgr.freezeTimer, "TIMER: FROZEN", "TIMER: RUNNING");
+            SetToggleStyle(freezeTimerBtn, freezeTimerLbl, mgr.freezeTimer,
+                LocalizationManager.Pick("TEMPO: PAUSADO", "TIMER: FROZEN"),
+                LocalizationManager.Pick("TEMPO: ATIVO",   "TIMER: RUNNING"));
 
             // Game Speed
             float activeSpeed = FightOverlayController.IsPaused ? FightOverlayController.SavedResumeTimeScale : Time.timeScale;
@@ -446,12 +475,18 @@ namespace EcclesiaFighters
             // Infinite HP
             bool infA = a && a.infiniteHP;
             bool infB = b && b.infiniteHP;
-            SetToggleStyle(infHpA_Btn, infHpA_Lbl, infA, "Inf HP P1: ON", "Inf HP P1: OFF");
-            SetToggleStyle(infHpB_Btn, infHpB_Lbl, infB, "Inf HP P2: ON", "Inf HP P2: OFF");
+            SetToggleStyle(infHpA_Btn, infHpA_Lbl, infA,
+                LocalizationManager.Pick("HP Inf J1: ON",  "Inf HP P1: ON"),
+                LocalizationManager.Pick("HP Inf J1: OFF", "Inf HP P1: OFF"));
+            SetToggleStyle(infHpB_Btn, infHpB_Lbl, infB,
+                LocalizationManager.Pick("HP Inf J2: ON",  "Inf HP P2: ON"),
+                LocalizationManager.Pick("HP Inf J2: OFF", "Inf HP P2: OFF"));
 
             // Hitbox Visualizer
-            SetToggleStyle(hurtboxBtn,    hurtboxLbl,    showHurtboxes,    "Hurtboxes: ON",     "Hurtboxes: OFF");
-            SetToggleStyle(moveHitboxBtn, moveHitboxLbl, showMoveHitboxes, "Move Hitboxes: ON", "Move Hitboxes: OFF");
+            SetToggleStyle(hurtboxBtn, hurtboxLbl, showHurtboxes, "Hurtboxes: ON", "Hurtboxes: OFF");
+            SetToggleStyle(moveHitboxBtn, moveHitboxLbl, showMoveHitboxes,
+                LocalizationManager.Pick("Hitboxes Golpe: ON",  "Move Hitboxes: ON"),
+                LocalizationManager.Pick("Hitboxes Golpe: OFF", "Move Hitboxes: OFF"));
 
             // Puppet Target Selector
             SetTierStyle(targetP1Btn, targetP1Lbl, targetIndex == 0);
@@ -462,14 +497,18 @@ namespace EcclesiaFighters
             {
                 if (!tgt)
                 {
-                    targetStatusText.text  = "Alvo indisponível";
+                    targetStatusText.text  = LocalizationManager.Pick("Alvo indisponível", "Target unavailable");
                     targetStatusText.color = ColTextMuted;
                 }
                 else
                 {
-                    string slot  = targetIndex == 0 ? "P1" : "P2";
-                    string mode  = tgt.HasAnimatorController ? "Humanoid Animator" : "Placeholder Visuals";
-                    string state = tgt.IsDead ? "DEAD" : (tgt.IsAttacking ? tgt.CurrentAttack.ToString() : "Ready");
+                    string slot  = targetIndex == 0 ? LocalizationManager.Pick("J1", "P1") : LocalizationManager.Pick("J2", "P2");
+                    string mode  = tgt.HasAnimatorController
+                        ? "Humanoid Animator"
+                        : LocalizationManager.Pick("Visual Placeholder", "Placeholder Visuals");
+                    string state = tgt.IsDead
+                        ? LocalizationManager.Pick("MORTO", "DEAD")
+                        : (tgt.IsAttacking ? tgt.CurrentAttack.ToString() : LocalizationManager.Pick("Pronto", "Ready"));
                     targetStatusText.text  = $"{slot}: {tgt.characterName}  •  [{mode}]  •  {state}";
                     targetStatusText.color = tgt.HasAnimatorController ? ColTextGold : ColTextLight;
                 }
@@ -478,8 +517,12 @@ namespace EcclesiaFighters
             // Posture Toggles on Active Target
             bool crouchOn = tgt && tgt.DevCrouchActive;
             bool blockOn  = tgt && tgt.DevBlockActive;
-            SetToggleStyle(crouchToggleBtn, crouchToggleLbl, crouchOn, "Crouch: ON", "Crouch: OFF");
-            SetToggleStyle(blockToggleBtn,  blockToggleLbl,  blockOn,  "Block: ON",  "Block: OFF");
+            SetToggleStyle(crouchToggleBtn, crouchToggleLbl, crouchOn,
+                LocalizationManager.Pick("Agachar: ON",  "Crouch: ON"),
+                LocalizationManager.Pick("Agachar: OFF", "Crouch: OFF"));
+            SetToggleStyle(blockToggleBtn,  blockToggleLbl,  blockOn,
+                LocalizationManager.Pick("Defender: ON",  "Block: ON"),
+                LocalizationManager.Pick("Defender: OFF", "Block: OFF"));
         }
 
         static void SetToggleStyle(Button btn, Text lbl, bool active, string onText, string offText)
@@ -540,7 +583,9 @@ namespace EcclesiaFighters
             headerRt.anchoredPosition = Vector2.zero;
             headerRt.sizeDelta        = new Vector2(0f, 40f);
 
-            var headerText = CreateLabel("HeaderTitle", header.transform, "DEV / TRAINING MODE  [F1]", 15, FontStyle.Bold, ColTextGold, TextAnchor.MiddleLeft);
+            var headerText = CreateLabel("HeaderTitle", header.transform,
+                LocalizationManager.Pick("MODO DEV / TREINO  [F1]", "DEV / TRAINING MODE  [F1]"),
+                15, FontStyle.Bold, ColTextGold, TextAnchor.MiddleLeft);
             var hdrTxtRt = headerText.GetComponent<RectTransform>();
             hdrTxtRt.anchorMin = Vector2.zero; hdrTxtRt.anchorMax = Vector2.one;
             hdrTxtRt.offsetMin = new Vector2(12f, 0f); hdrTxtRt.offsetMax = new Vector2(-46f, 0f);
@@ -607,75 +652,75 @@ namespace EcclesiaFighters
             scrollRect.verticalScrollbar = sb;
 
             // ── SECTION 1: Match & Cheat Controls ─────────────────
-            Transform sMatch = CreateSection(content.transform, "MATCH & CHEATS");
+            Transform sMatch = CreateSection(content.transform, LocalizationManager.Pick("PARTIDA & CHEATS", "MATCH & CHEATS"));
             Transform rowAI = CreateRow(sMatch);
-            (aiP1ToggleBtn, aiP1ToggleLbl) = CreateButton(rowAI, "AI P1: OFF", ColBtnIdle, () => ToggleAI(0));
-            (aiP2ToggleBtn, aiP2ToggleLbl) = CreateButton(rowAI, "AI P2: ON",  ColBtnIdle, () => ToggleAI(1));
+            (aiP1ToggleBtn, aiP1ToggleLbl) = CreateButton(rowAI, LocalizationManager.Pick("IA J1: OFF", "AI P1: OFF"), ColBtnIdle, () => ToggleAI(0));
+            (aiP2ToggleBtn, aiP2ToggleLbl) = CreateButton(rowAI, LocalizationManager.Pick("IA J2: ON",  "AI P2: ON"),  ColBtnIdle, () => ToggleAI(1));
 
             Transform rowTimer = CreateRow(sMatch);
-            (freezeTimerBtn, freezeTimerLbl) = CreateButton(rowTimer, "TIMER: RUNNING", ColBtnIdle, ToggleFreezeTimer);
+            (freezeTimerBtn, freezeTimerLbl) = CreateButton(rowTimer, LocalizationManager.Pick("TEMPO: ATIVO", "TIMER: RUNNING"), ColBtnIdle, ToggleFreezeTimer);
 
-            CreateSubLabel(sMatch, "Game Speed (Time.timeScale)");
+            CreateSubLabel(sMatch, LocalizationManager.Pick("Velocidade do Jogo (Time.timeScale)", "Game Speed (Time.timeScale)"));
             Transform rowSpeed = CreateRow(sMatch);
             (speed1Btn, speed1Lbl)             = CreateButton(rowSpeed, "1.0x",  ColBtnActive, () => SetGameSpeed(1.0f));
             (speedHalfBtn, speedHalfLbl)       = CreateButton(rowSpeed, "0.5x",  ColBtnIdle,   () => SetGameSpeed(0.5f));
             (speedQuarterBtn, speedQuarterLbl) = CreateButton(rowSpeed, "0.25x", ColBtnIdle,   () => SetGameSpeed(0.25f));
 
             Transform rowInf = CreateRow(sMatch);
-            (infHpA_Btn, infHpA_Lbl) = CreateButton(rowInf, "Inf HP P1: OFF", ColBtnIdle, () => ToggleInfiniteHP(true));
-            (infHpB_Btn, infHpB_Lbl) = CreateButton(rowInf, "Inf HP P2: OFF", ColBtnIdle, () => ToggleInfiniteHP(false));
+            (infHpA_Btn, infHpA_Lbl) = CreateButton(rowInf, LocalizationManager.Pick("HP Inf J1: OFF", "Inf HP P1: OFF"), ColBtnIdle, () => ToggleInfiniteHP(true));
+            (infHpB_Btn, infHpB_Lbl) = CreateButton(rowInf, LocalizationManager.Pick("HP Inf J2: OFF", "Inf HP P2: OFF"), ColBtnIdle, () => ToggleInfiniteHP(false));
 
             Transform rowHeal = CreateRow(sMatch);
-            CreateButton(rowHeal, "Full Heal Both",  ColBtnBlue, () => { mgr?.DevFullHealBoth(); FinishClick(); });
-            CreateButton(rowHeal, "Reset Positions", ColBtnBlue, () => { mgr?.DevResetPositionsAndRevive(); FinishClick(); });
+            CreateButton(rowHeal, LocalizationManager.Pick("Curar Ambos",       "Full Heal Both"),  ColBtnBlue, () => { mgr?.DevFullHealBoth(); FinishClick(); });
+            CreateButton(rowHeal, LocalizationManager.Pick("Resetar Posições",  "Reset Positions"), ColBtnBlue, () => { mgr?.DevResetPositionsAndRevive(); FinishClick(); });
 
             Transform rowSpecial = CreateRow(sMatch);
-            CreateButton(rowSpecial, "ENCHER ESPECIAL", ColBtnActive, () => { if (mgr != null) mgr.DevFillSpecialBoth(); FinishClick(); });
+            CreateButton(rowSpecial, LocalizationManager.Pick("ENCHER ESPECIAL", "FILL SPECIAL"), ColBtnActive, () => { if (mgr != null) mgr.DevFillSpecialBoth(); FinishClick(); });
 
             Transform rowKO = CreateRow(sMatch);
-            CreateButton(rowKO, "Insta-Kill P1", ColBtnDanger, () => { mgr?.DevInstaKill(true);  FinishClick(); });
-            CreateButton(rowKO, "Insta-Kill P2", ColBtnDanger, () => { mgr?.DevInstaKill(false); FinishClick(); });
+            CreateButton(rowKO, LocalizationManager.Pick("Insta-KO J1", "Insta-Kill P1"), ColBtnDanger, () => { mgr?.DevInstaKill(true);  FinishClick(); });
+            CreateButton(rowKO, LocalizationManager.Pick("Insta-KO J2", "Insta-Kill P2"), ColBtnDanger, () => { mgr?.DevInstaKill(false); FinishClick(); });
 
             // ── SECTION 2: Game-View Hitbox Visualizer ────────────
-            Transform sVis = CreateSection(content.transform, "GAME-VIEW HITBOX VISUALIZER");
+            Transform sVis = CreateSection(content.transform, LocalizationManager.Pick("VISUALIZADOR DE HITBOXES", "GAME-VIEW HITBOX VISUALIZER"));
             Transform rowVis = CreateRow(sVis);
-            (hurtboxBtn, hurtboxLbl)       = CreateButton(rowVis, "Hurtboxes: OFF",     ColBtnIdle, ToggleHurtboxes);
-            (moveHitboxBtn, moveHitboxLbl) = CreateButton(rowVis, "Move Hitboxes: OFF", ColBtnIdle, ToggleMoveHitboxes);
+            (hurtboxBtn, hurtboxLbl)       = CreateButton(rowVis, "Hurtboxes: OFF", ColBtnIdle, ToggleHurtboxes);
+            (moveHitboxBtn, moveHitboxLbl) = CreateButton(rowVis, LocalizationManager.Pick("Hitboxes Golpe: OFF", "Move Hitboxes: OFF"), ColBtnIdle, ToggleMoveHitboxes);
 
             // ── SECTION 3: Animation & Action Control Room ────────
-            Transform sPuppet = CreateSection(content.transform, "ANIMATION & ACTION CONTROL ROOM");
+            Transform sPuppet = CreateSection(content.transform, LocalizationManager.Pick("SALA DE CONTROLE & ANIMAÇÕES", "ANIMATION & ACTION CONTROL ROOM"));
             Transform rowTgt = CreateRow(sPuppet);
-            (targetP1Btn, targetP1Lbl) = CreateButton(rowTgt, "Target: P1", ColBtnActive, () => SelectTarget(0));
-            (targetP2Btn, targetP2Lbl) = CreateButton(rowTgt, "Target: P2", ColBtnIdle,   () => SelectTarget(1));
+            (targetP1Btn, targetP1Lbl) = CreateButton(rowTgt, LocalizationManager.Pick("Alvo: J1", "Target: P1"), ColBtnActive, () => SelectTarget(0));
+            (targetP2Btn, targetP2Lbl) = CreateButton(rowTgt, LocalizationManager.Pick("Alvo: J2", "Target: P2"), ColBtnIdle,   () => SelectTarget(1));
 
-            targetStatusText = CreateSubLabel(sPuppet, "Target ready");
+            targetStatusText = CreateSubLabel(sPuppet, LocalizationManager.Pick("Alvo pronto", "Target ready"));
 
-            CreateSubLabel(sPuppet, "Combat Moves (Auto-disables target AI)");
+            CreateSubLabel(sPuppet, LocalizationManager.Pick("Golpes (Desativa IA do alvo)", "Combat Moves (Auto-disables target AI)"));
             Transform rowAtk1 = CreateRow(sPuppet);
-            CreateButton(rowAtk1, "Light Punch", ColBtnIdle, () => RunPuppet(f => f.DevTriggerAttack(FighterController.AttackType.LightPunch)));
-            CreateButton(rowAtk1, "Heavy Punch", ColBtnIdle, () => RunPuppet(f => f.DevTriggerAttack(FighterController.AttackType.HeavyPunch)));
+            CreateButton(rowAtk1, LocalizationManager.Pick("Soco Leve",  "Light Punch"), ColBtnIdle, () => RunPuppet(f => f.DevTriggerAttack(FighterController.AttackType.LightPunch)));
+            CreateButton(rowAtk1, LocalizationManager.Pick("Soco Forte", "Heavy Punch"), ColBtnIdle, () => RunPuppet(f => f.DevTriggerAttack(FighterController.AttackType.HeavyPunch)));
 
             Transform rowAtk2 = CreateRow(sPuppet);
-            CreateButton(rowAtk2, "Kick",    ColBtnIdle, () => RunPuppet(f => f.DevTriggerAttack(FighterController.AttackType.Kick)));
-            CreateButton(rowAtk2, "Special", ColBtnIdle, () => RunPuppet(f => { f.DevFillSpecial(); f.DevTriggerAttack(FighterController.AttackType.Special); }));
-            CreateButton(rowAtk2, "Jump",    ColBtnIdle, () => RunPuppet(f => f.DevTriggerJump()));
+            CreateButton(rowAtk2, LocalizationManager.Pick("Chute",    "Kick"),    ColBtnIdle, () => RunPuppet(f => f.DevTriggerAttack(FighterController.AttackType.Kick)));
+            CreateButton(rowAtk2, LocalizationManager.Pick("Especial", "Special"), ColBtnIdle, () => RunPuppet(f => { f.DevFillSpecial(); f.DevTriggerAttack(FighterController.AttackType.Special); }));
+            CreateButton(rowAtk2, LocalizationManager.Pick("Pular",    "Jump"),    ColBtnIdle, () => RunPuppet(f => f.DevTriggerJump()));
 
-            CreateSubLabel(sPuppet, "Held States & Timed Walk");
+            CreateSubLabel(sPuppet, LocalizationManager.Pick("Posturas & Caminhada", "Held States & Timed Walk"));
             Transform rowPosture = CreateRow(sPuppet);
-            (crouchToggleBtn, crouchToggleLbl) = CreateButton(rowPosture, "Crouch: OFF", ColBtnIdle, () => RunPuppet(f => f.DevToggleCrouch()));
-            (blockToggleBtn,  blockToggleLbl)  = CreateButton(rowPosture, "Block: OFF",  ColBtnIdle, () => RunPuppet(f => f.DevToggleBlock()));
+            (crouchToggleBtn, crouchToggleLbl) = CreateButton(rowPosture, LocalizationManager.Pick("Agachar: OFF",  "Crouch: OFF"), ColBtnIdle, () => RunPuppet(f => f.DevToggleCrouch()));
+            (blockToggleBtn,  blockToggleLbl)  = CreateButton(rowPosture, LocalizationManager.Pick("Defender: OFF", "Block: OFF"),  ColBtnIdle, () => RunPuppet(f => f.DevToggleBlock()));
 
             Transform rowWalk = CreateRow(sPuppet);
-            CreateButton(rowWalk, "Walk Forward (1s)", ColBtnIdle, () => RunPuppet(f => f.DevWalkTimed(+1, 1.0f)));
-            CreateButton(rowWalk, "Walk Back (1s)",    ColBtnIdle, () => RunPuppet(f => f.DevWalkTimed(-1, 1.0f)));
+            CreateButton(rowWalk, LocalizationManager.Pick("Andar Frente (1s)", "Walk Forward (1s)"), ColBtnIdle, () => RunPuppet(f => f.DevWalkTimed(+1, 1.0f)));
+            CreateButton(rowWalk, LocalizationManager.Pick("Andar Trás (1s)",   "Walk Back (1s)"),    ColBtnIdle, () => RunPuppet(f => f.DevWalkTimed(-1, 1.0f)));
 
-            CreateSubLabel(sPuppet, "Reactions (No Attacker Needed)");
+            CreateSubLabel(sPuppet, LocalizationManager.Pick("Reações (Sem atacante)", "Reactions (No Attacker Needed)"));
             Transform rowReact = CreateRow(sPuppet);
-            CreateButton(rowReact, "Trigger Hit",   ColBtnIdle,   () => RunPuppet(f => f.DevTriggerHit(0f)));
-            CreateButton(rowReact, "Trigger Death", ColBtnDanger, () => RunPuppet(f => f.DevForceKill(triggerKOEvent: false)));
+            CreateButton(rowReact, LocalizationManager.Pick("Testar Dano",  "Trigger Hit"),   ColBtnIdle,   () => RunPuppet(f => f.DevTriggerHit(0f)));
+            CreateButton(rowReact, LocalizationManager.Pick("Testar Morte", "Trigger Death"), ColBtnDanger, () => RunPuppet(f => f.DevForceKill(triggerKOEvent: false)));
 
             Transform rowRevive = CreateRow(sPuppet);
-            CreateButton(rowRevive, "Revive / Reset Idle", ColBtnBlue, () => RunPuppet(f => f.DevReviveAndResetIdle()));
+            CreateButton(rowRevive, LocalizationManager.Pick("Reviver / Idle", "Revive / Reset Idle"), ColBtnBlue, () => RunPuppet(f => f.DevReviveAndResetIdle()));
 
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentRt);
         }

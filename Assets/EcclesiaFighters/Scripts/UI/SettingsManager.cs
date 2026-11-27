@@ -33,6 +33,10 @@ namespace EcclesiaFighters
         public Button nextResolutionButton;
         public Text   resolutionLabel;
 
+        [Header("Language")]
+        public Button langPtButton;
+        public Button langEnButton;
+
         [Header("Volume")]
         public AudioMixer audioMixer;       // optional: exposed params Vol_Master / Vol_Music / Vol_SFX / Vol_Voice (dB)
         public Slider masterSlider, musicSlider, sfxSlider, voiceSlider;
@@ -55,9 +59,10 @@ namespace EcclesiaFighters
         };
 
         // pending (edited) values
-        int   pQuality, pRes;
-        bool  pVsync, pFull;
-        float pMaster = 1f, pMusic = 1f, pSfx = 1f, pVoice = 1f;
+        int          pQuality, pRes;
+        bool         pVsync, pFull;
+        float        pMaster = 1f, pMusic = 1f, pSfx = 1f, pVoice = 1f;
+        GameLanguage pLanguage = GameLanguage.Portuguese;
         readonly KeyCode[,] pKeys = new KeyCode[KeybindManager.PlayerCount, KeybindManager.ActionCount];
 
         int  activeTab; // 0 = GERAL, 1 = CONTROLES
@@ -85,16 +90,26 @@ namespace EcclesiaFighters
         // ─────────────────────────── lifecycle ───────────────────────────
         void OnEnable()
         {
+            LocalizationManager.OnLanguageChanged += OnLanguageChanged;
+            EnsureLanguageUI();
             EnsureControlsTabUI();
             BuildResolutionList();
             LoadAppliedIntoPending();
             SetActiveTab(0);
             PreviewAudio();
+            ApplyLocalization();
         }
 
         void OnDisable()
         {
+            LocalizationManager.OnLanguageChanged -= OnLanguageChanged;
             CancelListening();
+        }
+
+        void OnLanguageChanged(GameLanguage _)
+        {
+            ApplyLocalization();
+            RefreshUI();
         }
 
         void Update()
@@ -131,11 +146,18 @@ namespace EcclesiaFighters
             if (generalTabRoot)  generalTabRoot.SetActive(activeTab == 0);
             if (controlsTabRoot) controlsTabRoot.SetActive(activeTab == 1);
 
-            if (subHeadingLabel)
-                subHeadingLabel.text = activeTab == 1
-                    ? "REMAPEAMENTO DE TECLAS  ·  JOGADOR 1 E JOGADOR 2"
-                    : "VÍDEO, EXIBIÇÃO E ÁUDIO";
+            ApplyLocalization();
+            RefreshUI();
+        }
 
+        public void SetLanguagePT() => SetLanguagePending(GameLanguage.Portuguese);
+        public void SetLanguageEN() => SetLanguagePending(GameLanguage.English);
+
+        void SetLanguagePending(GameLanguage lang)
+        {
+            pLanguage = lang;
+            LocalizationManager.PreviewLanguage(lang);
+            ClearFocus();
             RefreshUI();
         }
 
@@ -191,6 +213,8 @@ namespace EcclesiaFighters
             PlayerPrefs.SetFloat(SettingsStore.KSfx,    pSfx);
             PlayerPrefs.SetFloat(SettingsStore.KVoice,  pVoice);
 
+            LocalizationManager.SetLanguage(pLanguage, saveImmediate: false);
+
             for (int p = 0; p < KeybindManager.PlayerCount; p++)
             {
                 for (int a = 0; a < KeybindManager.ActionCount; a++)
@@ -200,11 +224,12 @@ namespace EcclesiaFighters
             PlayerPrefs.Save();
 
             PreviewAudio();
+            ApplyLocalization();
             RefreshUI();
             ClearFocus();
         }
 
-        /// <summary>RESET — restore defaults on the active tab (CONTROLES resets keybinds; GERAL resets video/audio).</summary>
+        /// <summary>RESET — restore defaults on the active tab (CONTROLES resets keybinds; GERAL resets video/audio/language).</summary>
         public void ResetToDefaults()
         {
             CancelListening();
@@ -215,15 +240,18 @@ namespace EcclesiaFighters
             }
             else
             {
-                pQuality = SettingsStore.DefaultQuality();
-                pVsync   = true;
-                pFull    = true;
-                pRes     = NativeResIndex();
-                pMaster = pMusic = pSfx = pVoice = 1f;
+                pQuality  = SettingsStore.DefaultQuality();
+                pVsync    = true;
+                pFull     = true;
+                pRes      = NativeResIndex();
+                pMaster   = pMusic = pSfx = pVoice = 1f;
+                pLanguage = GameLanguage.Portuguese;
+                LocalizationManager.PreviewLanguage(pLanguage);
                 if (!controlsTabRoot) ResetPendingKeybindsToDefaults();
                 PreviewAudio();
             }
 
+            ApplyLocalization();
             RefreshUI();
             ClearFocus();
         }
@@ -233,7 +261,9 @@ namespace EcclesiaFighters
         {
             AudioManager.PlayUIBack();
             CancelListening();
+            LocalizationManager.ReloadSaved();
             LoadAppliedIntoPending();
+            ApplyLocalization();
             RefreshUI();
             PreviewAudio();
             ClearFocus();
@@ -345,10 +375,11 @@ namespace EcclesiaFighters
             if (pRes < 0) pRes = IndexOfRes(Screen.width, Screen.height);
             if (pRes < 0) pRes = resolutions.Count - 1;
 
-            pMaster = PlayerPrefs.GetFloat(SettingsStore.KMaster, 1f);
-            pMusic  = PlayerPrefs.GetFloat(SettingsStore.KMusic,  1f);
-            pSfx    = PlayerPrefs.GetFloat(SettingsStore.KSfx,    1f);
-            pVoice  = PlayerPrefs.GetFloat(SettingsStore.KVoice,  1f);
+            pMaster   = PlayerPrefs.GetFloat(SettingsStore.KMaster, 1f);
+            pMusic    = PlayerPrefs.GetFloat(SettingsStore.KMusic,  1f);
+            pSfx      = PlayerPrefs.GetFloat(SettingsStore.KSfx,    1f);
+            pVoice    = PlayerPrefs.GetFloat(SettingsStore.KVoice,  1f);
+            pLanguage = LocalizationManager.CurrentLanguage;
 
             for (int p = 0; p < KeybindManager.PlayerCount; p++)
                 for (int a = 0; a < KeybindManager.ActionCount; a++)
@@ -374,6 +405,8 @@ namespace EcclesiaFighters
             HighlightQuality();
             ApplyButtonHighlight(tabGeneralButton,  activeTab == 0);
             ApplyButtonHighlight(tabControlsButton, activeTab == 1);
+            ApplyButtonHighlight(langPtButton, pLanguage == GameLanguage.Portuguese);
+            ApplyButtonHighlight(langEnButton, pLanguage == GameLanguage.English);
             RefreshKeyButtons();
         }
 
@@ -403,11 +436,138 @@ namespace EcclesiaFighters
                 if (lbl)
                 {
                     lbl.text = listeningThis
-                        ? "PRESSIONE UMA TECLA..."
+                        ? LocalizationManager.Pick("PRESSIONE UMA TECLA...", "PRESS ANY KEY...")
                         : KeybindManager.GetPrettyKeyName(pKeys[playerIdx, a]);
                 }
                 ApplyButtonHighlight(btn, listeningThis);
             }
+        }
+
+        public void ApplyLocalization()
+        {
+            if (subHeadingLabel != null)
+            {
+                subHeadingLabel.text = activeTab == 1
+                    ? LocalizationManager.Pick("REMAPEAMENTO DE TECLAS  ·  JOGADOR 1 E JOGADOR 2", "KEY BINDINGS  ·  PLAYER 1 AND PLAYER 2")
+                    : LocalizationManager.Pick("VÍDEO, EXIBIÇÃO E ÁUDIO", "VIDEO, DISPLAY & AUDIO");
+            }
+
+            SetButtonText(tabGeneralButton,  LocalizationManager.Pick("GERAL",     "GENERAL"));
+            SetButtonText(tabControlsButton, LocalizationManager.Pick("CONTROLES", "CONTROLS"));
+
+            Transform boxTf = transform.Find("Box");
+            if (boxTf != null)
+            {
+                SetTextChild(boxTf, "HeaderBar/Heading", LocalizationManager.Pick("CONFIGURAÇÕES", "SETTINGS"));
+
+                Transform leftTf = boxTf.Find("BodyColumns/LeftColumn");
+                if (leftTf != null)
+                {
+                    SetTextChild(leftTf, "VideoSection",    LocalizationManager.Pick("VÍDEO & GRÁFICOS", "VIDEO & GRAPHICS"));
+                    SetTextChild(leftTf, "GraphicsLabel",   LocalizationManager.Pick("QUALIDADE GRÁFICA", "GRAPHICS QUALITY"));
+                    SetTextChild(leftTf, "ResolutionLabel", LocalizationManager.Pick("RESOLUÇÃO", "RESOLUTION"));
+                    SetTextChild(leftTf, "LanguageLabel",   LocalizationManager.Pick("IDIOMA", "LANGUAGE"));
+
+                    if (fullscreenToggle != null)
+                    {
+                        Text fTxt = fullscreenToggle.GetComponentInChildren<Text>(true);
+                        if (fTxt != null) fTxt.text = LocalizationManager.Pick("TELA CHEIA", "FULLSCREEN");
+                    }
+                    if (vsyncToggle != null)
+                    {
+                        Text vTxt = vsyncToggle.GetComponentInChildren<Text>(true);
+                        if (vTxt != null) vTxt.text = "V-SYNC";
+                    }
+                }
+
+                Transform rightTf = boxTf.Find("BodyColumns/RightColumn");
+                if (rightTf != null)
+                {
+                    SetTextChild(rightTf, "AudioSection", LocalizationManager.Pick("ÁUDIO & MIXAGEM", "AUDIO & MIXING"));
+                    SetVolumeRowLabel(rightTf, "MASTERRow/MASTERLabel", "GERALRow/GERALLabel", LocalizationManager.Pick("GERAL", "MASTER"));
+                    SetVolumeRowLabel(rightTf, "MÚSICARow/MÚSICALabel", null,                  LocalizationManager.Pick("MÚSICA", "MUSIC"));
+                    SetVolumeRowLabel(rightTf, "EFEITOSRow/EFEITOSLabel", null,                LocalizationManager.Pick("EFEITOS", "SFX"));
+                    SetVolumeRowLabel(rightTf, "VOZESRow/VOZESLabel",   null,                  LocalizationManager.Pick("VOZES", "VOICES"));
+                    SetTextChild(rightTf, "AudioHint", LocalizationManager.Pick(
+                        "Ajustes de áudio são pré-visualizados em tempo real.\nClique em APLICAR para salvar permanentemente.",
+                        "Audio levels preview in real time.\nClick APPLY to save changes permanently."));
+                }
+
+                SetButtonTextAt(boxTf, "FooterActions/Btn_Reset",   LocalizationManager.Pick("RESET", "RESET"));
+                SetButtonTextAt(boxTf, "FooterActions/Btn_Voltar",  LocalizationManager.Pick("VOLTAR", "BACK"));
+                SetButtonTextAt(boxTf, "FooterActions/Btn_Aplicar", LocalizationManager.Pick("APLICAR", "APPLY"));
+            }
+
+            if (qualityButtons != null)
+            {
+                string[] qNames = QualitySettings.names;
+                for (int i = 0; i < qualityButtons.Length && i < qNames.Length; i++)
+                    SetButtonText(qualityButtons[i], LocalizationManager.GetQualityLevelLabel(qNames[i]));
+            }
+
+            SetButtonText(langPtButton, "PORTUGUÊS");
+            SetButtonText(langEnButton, "ENGLISH");
+
+            if (controlsTabRoot != null)
+            {
+                Transform cTf = controlsTabRoot.transform;
+                Transform p1Col = cTf.Find("P1ControlsColumn");
+                Transform p2Col = cTf.Find("P2ControlsColumn");
+                if (p1Col != null)
+                {
+                    SetTextChild(p1Col, "SectionHeading", LocalizationManager.Pick("JOGADOR 1 (P1)", "PLAYER 1 (P1)"));
+                    SetTextChild(p1Col, "Title",          LocalizationManager.Pick("JOGADOR 1 (P1)", "PLAYER 1 (P1)"));
+                    UpdateColumnActionLabels(p1Col);
+                }
+                if (p2Col != null)
+                {
+                    SetTextChild(p2Col, "SectionHeading", LocalizationManager.Pick("JOGADOR 2 (P2)", "PLAYER 2 (P2)"));
+                    SetTextChild(p2Col, "Title",          LocalizationManager.Pick("JOGADOR 2 (P2)", "PLAYER 2 (P2)"));
+                    UpdateColumnActionLabels(p2Col);
+                }
+            }
+        }
+
+        static void UpdateColumnActionLabels(Transform colTf)
+        {
+            for (int a = 0; a < KeybindManager.ActionCount; a++)
+            {
+                Transform rowTf = colTf.Find("BindRow_" + (FighterAction)a);
+                if (rowTf != null)
+                    SetTextChild(rowTf, "ActionLabel", LocalizationManager.GetActionLabel((FighterAction)a));
+            }
+        }
+
+        static void SetVolumeRowLabel(Transform parent, string path1, string path2, string text)
+        {
+            Transform tf = parent.Find(path1);
+            if (tf == null && !string.IsNullOrEmpty(path2)) tf = parent.Find(path2);
+            if (tf == null) return;
+            Text t = tf.GetComponent<Text>();
+            if (t != null) t.text = text;
+        }
+
+        static void SetTextChild(Transform parent, string path, string text)
+        {
+            Transform tf = parent.Find(path);
+            if (tf == null) return;
+            Text t = tf.GetComponent<Text>();
+            if (t != null) t.text = text;
+        }
+
+        static void SetButtonText(Button btn, string text)
+        {
+            if (btn == null) return;
+            Text t = btn.GetComponentInChildren<Text>(true);
+            if (t != null) t.text = text;
+        }
+
+        static void SetButtonTextAt(Transform parent, string path, string text)
+        {
+            Transform tf = parent.Find(path);
+            if (tf == null) return;
+            Text t = tf.GetComponentInChildren<Text>(true);
+            if (t != null) t.text = text;
         }
 
         static void ApplyButtonHighlight(Button b, bool sel)
@@ -429,6 +589,52 @@ namespace EcclesiaFighters
         }
 
         // ─────────────────────────── Runtime Fallback Builder (un-rebuilt scenes) ───────────────────────────
+        void EnsureLanguageUI()
+        {
+            if (langPtButton != null && langEnButton != null) return;
+
+            Transform leftColTf = transform.Find("Box/BodyColumns/LeftColumn");
+            if (leftColTf == null) return;
+
+            Transform existingRow = leftColTf.Find("LanguageRow");
+            if (existingRow != null)
+            {
+                Transform ptTf = existingRow.Find("Btn_LangPT");
+                Transform enTf = existingRow.Find("Btn_LangEN");
+                if (ptTf != null) langPtButton = ptTf.GetComponent<Button>();
+                if (enTf != null) langEnButton = enTf.GetComponent<Button>();
+                if (langPtButton != null && langEnButton != null) return;
+            }
+
+            Button templateBtn = qualityButtons != null && qualityButtons.Length > 0 ? qualityButtons[0] : null;
+            Sprite panelSpr = templateBtn != null && templateBtn.image != null ? templateBtn.image.sprite : null;
+            Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+            var lblGo = new GameObject("LanguageLabel", typeof(RectTransform), typeof(Text));
+            lblGo.transform.SetParent(leftColTf, false);
+            var lTxt = lblGo.GetComponent<Text>();
+            lTxt.font = font;
+            lTxt.text = LocalizationManager.Pick("IDIOMA", "LANGUAGE");
+            lTxt.fontSize = 20;
+            lTxt.fontStyle = FontStyle.Bold;
+            lTxt.color = new Color(0.76f, 0.72f, 0.65f, 0.95f);
+            lTxt.alignment = TextAnchor.MiddleLeft;
+            lblGo.AddComponent<LayoutElement>().preferredHeight = 28f;
+
+            var rowGo = new GameObject("LanguageRow", typeof(RectTransform));
+            rowGo.transform.SetParent(leftColTf, false);
+            rowGo.AddComponent<LayoutElement>().preferredHeight = 52f;
+            var hlg = rowGo.AddComponent<HorizontalLayoutGroup>();
+            hlg.spacing = 14f;
+            hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
+            hlg.childForceExpandWidth = true;
+            hlg.childForceExpandHeight = true;
+
+            langPtButton = CreateRuntimeButton(rowGo.transform, "Btn_LangPT", "PORTUGUÊS", 20, templateBtn, panelSpr, font, SetLanguagePT);
+            langEnButton = CreateRuntimeButton(rowGo.transform, "Btn_LangEN", "ENGLISH",   20, templateBtn, panelSpr, font, SetLanguageEN);
+        }
+
         void EnsureControlsTabUI()
         {
             if (controlsTabRoot != null) return;

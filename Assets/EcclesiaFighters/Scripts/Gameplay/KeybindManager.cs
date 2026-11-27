@@ -184,17 +184,17 @@ namespace EcclesiaFighters
             switch (key)
             {
                 case KeyCode.None:         return "—";
-                case KeyCode.LeftShift:    return "SHIFT ESQ";
-                case KeyCode.RightShift:   return "SHIFT DIR";
-                case KeyCode.LeftControl:  return "CTRL ESQ";
-                case KeyCode.RightControl: return "CTRL DIR";
-                case KeyCode.LeftAlt:      return "ALT ESQ";
-                case KeyCode.RightAlt:     return "ALT GR";
-                case KeyCode.UpArrow:      return "SETA ↑";
-                case KeyCode.DownArrow:    return "SETA ↓";
-                case KeyCode.LeftArrow:    return "SETA ←";
-                case KeyCode.RightArrow:   return "SETA →";
-                case KeyCode.Space:        return "ESPAÇO";
+                case KeyCode.LeftShift:    return LocalizationManager.Pick("SHIFT ESQ", "L-SHIFT");
+                case KeyCode.RightShift:   return LocalizationManager.Pick("SHIFT DIR", "R-SHIFT");
+                case KeyCode.LeftControl:  return LocalizationManager.Pick("CTRL ESQ",  "L-CTRL");
+                case KeyCode.RightControl: return LocalizationManager.Pick("CTRL DIR",  "R-CTRL");
+                case KeyCode.LeftAlt:      return LocalizationManager.Pick("ALT ESQ",   "L-ALT");
+                case KeyCode.RightAlt:     return LocalizationManager.Pick("ALT GR",    "R-ALT");
+                case KeyCode.UpArrow:      return LocalizationManager.Pick("SETA ↑",    "UP ↑");
+                case KeyCode.DownArrow:    return LocalizationManager.Pick("SETA ↓",    "DOWN ↓");
+                case KeyCode.LeftArrow:    return LocalizationManager.Pick("SETA ←",    "LEFT ←");
+                case KeyCode.RightArrow:   return LocalizationManager.Pick("SETA →",    "RIGHT →");
+                case KeyCode.Space:        return LocalizationManager.Pick("ESPAÇO",    "SPACE");
                 case KeyCode.Return:       return "ENTER";
                 case KeyCode.KeypadEnter:  return "NUM ENTER";
                 case KeyCode.Tab:          return "TAB";
@@ -213,20 +213,29 @@ namespace EcclesiaFighters
 
         public static string FormatMoveLegend(int playerIndex)
         {
-            return $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.MoveLeft))}/" +
-                   $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.MoveRight))} Mover · " +
-                   $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Jump))} Pular · " +
-                   $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Crouch))} Agachar · " +
-                   $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Block))} Defender";
+            string l = GetPrettyKeyName(GetKey(playerIndex, FighterAction.MoveLeft));
+            string r = GetPrettyKeyName(GetKey(playerIndex, FighterAction.MoveRight));
+            string j = GetPrettyKeyName(GetKey(playerIndex, FighterAction.Jump));
+            string c = GetPrettyKeyName(GetKey(playerIndex, FighterAction.Crouch));
+            string b = GetPrettyKeyName(GetKey(playerIndex, FighterAction.Block));
+
+            return LocalizationManager.Pick(
+                $"{l}/{r} Mover (2x Correr) · {j} Pular · {c} Agachar · {b} Defender",
+                $"{l}/{r} Move (2x Sprint) · {j} Jump · {c} Crouch · {b} Block");
         }
 
         public static string FormatAttackLegend(int playerIndex)
         {
-            return $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.LightPunch))} Soco Leve · " +
-                   $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.HeavyPunch))} Soco Forte · " +
-                   $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Kick))} Chute · " +
-                   $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Special))} Especial · " +
-                   $"{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Block))}+{GetPrettyKeyName(GetKey(playerIndex, FighterAction.Crouch))} Carregar";
+            string lp = GetPrettyKeyName(GetKey(playerIndex, FighterAction.LightPunch));
+            string hp = GetPrettyKeyName(GetKey(playerIndex, FighterAction.HeavyPunch));
+            string k  = GetPrettyKeyName(GetKey(playerIndex, FighterAction.Kick));
+            string sp = GetPrettyKeyName(GetKey(playerIndex, FighterAction.Special));
+            string b  = GetPrettyKeyName(GetKey(playerIndex, FighterAction.Block));
+            string c  = GetPrettyKeyName(GetKey(playerIndex, FighterAction.Crouch));
+
+            return LocalizationManager.Pick(
+                $"{lp} Soco Leve · {hp} Soco Forte · {k} Chute · {sp} Especial · {b}+{c} Carregar",
+                $"{lp} Light Punch · {hp} Heavy Punch · {k} Kick · {sp} Special · {b}+{c} Charge");
         }
     }
 }

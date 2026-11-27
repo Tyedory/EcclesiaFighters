@@ -197,7 +197,7 @@ namespace EcclesiaFighters.EditorTools
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = true;
 
-            string[] labels = { "INICIAR BATALHA", "CONFIGURAÇÕES", "SAIR" };
+            string[] labels = { "JOGAR", "CONFIGURAÇÕES", "SAIR" };
             ButtonVariant[] variants = { ButtonVariant.PrimaryCrimson, ButtonVariant.Default, ButtonVariant.SecondaryDanger };
             var buttons = new Button[labels.Length];
             for (int i = 0; i < labels.Length; i++)
@@ -394,6 +394,44 @@ namespace EcclesiaFighters.EditorTools
             Toggle full = AddToggle(toggleRow, "FullscreenToggle", "TELA CHEIA");
             UnityEventTools.AddPersistentListener<bool>(full.onValueChanged, settings.SetFullscreen);
 
+            Text langLbl = AddText(leftCol.rectTransform, "LanguageLabel", "IDIOMA", 20, IvoryMuted, TextAnchor.MiddleLeft, FontStyle.Bold);
+            SetLayoutElement(langLbl.gameObject, preferredHeight: 28f);
+
+            RectTransform langRow = NewRect("LanguageRow", leftCol.rectTransform);
+            SetLayoutElement(langRow.gameObject, preferredHeight: 52f);
+            var langHlg = langRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            langHlg.spacing = 14f;
+            langHlg.childControlWidth = true;
+            langHlg.childControlHeight = true;
+            langHlg.childForceExpandWidth = true;
+            langHlg.childForceExpandHeight = true;
+
+            Button langPtBtn = AddButton(langRow, "Btn_LangPT", "PORTUGUÊS", 20, ButtonVariant.Compact);
+            langPtBtn.navigation = new Navigation { mode = Navigation.Mode.None };
+            var ptJuice = langPtBtn.GetComponent<UIButtonJuice>();
+            if (ptJuice != null)
+            {
+                ptJuice.driveLabelColor = true;
+                ptJuice.selectedBg      = new Color(0.88f, 0.70f, 0.24f, 1f);
+                ptJuice.selectedFrame   = BrightGold;
+                ptJuice.selectedText    = new Color(0.05f, 0.03f, 0.02f, 1f);
+                ptJuice.SetSelected(true);
+            }
+            UnityEventTools.AddPersistentListener(langPtBtn.onClick, settings.SetLanguagePT);
+
+            Button langEnBtn = AddButton(langRow, "Btn_LangEN", "ENGLISH", 20, ButtonVariant.Compact);
+            langEnBtn.navigation = new Navigation { mode = Navigation.Mode.None };
+            var enJuice = langEnBtn.GetComponent<UIButtonJuice>();
+            if (enJuice != null)
+            {
+                enJuice.driveLabelColor = true;
+                enJuice.selectedBg      = new Color(0.88f, 0.70f, 0.24f, 1f);
+                enJuice.selectedFrame   = BrightGold;
+                enJuice.selectedText    = new Color(0.05f, 0.03f, 0.02f, 1f);
+                enJuice.SetSelected(false);
+            }
+            UnityEventTools.AddPersistentListener(langEnBtn.onClick, settings.SetLanguageEN);
+
             // Center vertical divider strip
             Image centerSep = AddImage(body, "ColumnDivider", new Color(0.84f, 0.67f, 0.27f, 0.35f), null, false);
             SetLayoutElement(centerSep.gameObject, preferredWidth: 2f);
@@ -509,6 +547,8 @@ namespace EcclesiaFighters.EditorTools
             settings.prevResolutionButton = resPrev;
             settings.nextResolutionButton = resNext;
             settings.resolutionLabel      = resText;
+            settings.langPtButton         = langPtBtn;
+            settings.langEnButton         = langEnBtn;
             settings.masterSlider         = sliders[0];
             settings.musicSlider          = sliders[1];
             settings.sfxSlider            = sliders[2];

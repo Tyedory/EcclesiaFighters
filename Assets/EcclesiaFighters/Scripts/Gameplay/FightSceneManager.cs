@@ -73,6 +73,45 @@ namespace EcclesiaFighters
 
         static readonly string[] NAMES = { "Santo Agostinho", "Karl Marx" };
 
+        void OnEnable()
+        {
+            LocalizationManager.OnLanguageChanged += OnLanguageChanged;
+        }
+
+        void OnDisable()
+        {
+            LocalizationManager.OnLanguageChanged -= OnLanguageChanged;
+        }
+
+        void OnLanguageChanged(GameLanguage _) => ApplyLocalization();
+
+        void ApplyLocalization()
+        {
+            int idxA = Clamp(PlayerPrefs.GetInt("SelectedCharA", 0));
+            int idxB = Clamp(PlayerPrefs.GetInt("SelectedCharB", 1));
+            string nA = LocalizationManager.GetFighterName(idxA);
+            string nB = LocalizationManager.GetFighterName(idxB);
+
+            if (ctrlA != null) ctrlA.characterName = nA;
+            if (ctrlB != null) ctrlB.characterName = nB;
+            if (nameTagA != null) nameTagA.text = nA;
+            if (nameTagB != null) nameTagB.text = nB;
+
+            string readyLabel = LocalizationManager.Pick("ESPECIAL PRONTO!", "SPECIAL READY!");
+            if (spReadyTextA != null) spReadyTextA.text = readyLabel;
+            if (spReadyTextB != null) spReadyTextB.text = readyLabel;
+
+            if (timerText != null && timerText.transform.parent != null)
+            {
+                Transform lblTf = timerText.transform.parent.Find("TimerLabel");
+                if (lblTf != null)
+                {
+                    Text lbl = lblTf.GetComponent<Text>();
+                    if (lbl != null) lbl.text = LocalizationManager.Pick("TEMPO", "TIME");
+                }
+            }
+        }
+
         // ══════════════════════════════════════════════════════
         void Start() => StartCoroutine(Setup());
 
@@ -131,6 +170,7 @@ namespace EcclesiaFighters
             fightOverlay = GetComponent<FightOverlayController>() ?? gameObject.AddComponent<FightOverlayController>();
             fightOverlay.Initialize(this);
             EnsureSpecialBarsHUD();
+            ApplyLocalization();
             if (hud) hud.alpha = 0f;
             yield return fightOverlay.ShowPreFightSplashAndWait();
 
@@ -158,7 +198,8 @@ namespace EcclesiaFighters
 
             if (ctrlA != null)
             {
-                ctrlA.characterName = NAMES[cleanA];
+                string dispA = LocalizationManager.GetFighterName(cleanA);
+                ctrlA.characterName = dispA;
                 FighterAI aiA = ctrlA.ConfigureControlOwnership(playerControlled: !p1IsAI, slotIndex: 0);
                 if (aiA != null) aiA.SetDifficulty(aiDiff);
                 ctrlA.opponent      = objB.transform;
@@ -167,11 +208,12 @@ namespace EcclesiaFighters
                 ctrlA.FaceDirection(+1);
                 ctrlA.OnKO         += () => EndRound(false);
                 ctrlA.SetInputEnabled(false);
-                if (nameTagA != null) nameTagA.text = NAMES[cleanA];
+                if (nameTagA != null) nameTagA.text = dispA;
             }
             if (ctrlB != null)
             {
-                ctrlB.characterName = NAMES[cleanB];
+                string dispB = LocalizationManager.GetFighterName(cleanB);
+                ctrlB.characterName = dispB;
                 FighterAI aiB = ctrlB.ConfigureControlOwnership(playerControlled: !p2IsAI, slotIndex: 1);
                 if (aiB != null) aiB.SetDifficulty(aiDiff);
                 ctrlB.opponent      = objA.transform;
@@ -180,7 +222,7 @@ namespace EcclesiaFighters
                 ctrlB.FaceDirection(-1);
                 ctrlB.OnKO         += () => EndRound(true);
                 ctrlB.SetInputEnabled(false);
-                if (nameTagB != null) nameTagB.text = NAMES[cleanB];
+                if (nameTagB != null) nameTagB.text = dispB;
             }
             yield return null;
         }
@@ -352,7 +394,7 @@ namespace EcclesiaFighters
             StretchFullRect(readyGo.GetComponent<RectTransform>());
             spReadyText                      = readyGo.GetComponent<Text>();
             spReadyText.font                 = uiFont;
-            spReadyText.text                 = "ESPECIAL PRONTO!";
+            spReadyText.text                 = LocalizationManager.Pick("ESPECIAL PRONTO!", "SPECIAL READY!");
             spReadyText.fontSize             = 14;
             spReadyText.fontStyle            = FontStyle.Bold;
             spReadyText.color                = new Color(1f, 0.97f, 0.86f, 1f);
@@ -436,11 +478,13 @@ namespace EcclesiaFighters
         {
             hud.alpha = 0;
             bool isFinalRound = (round >= roundsToWin * 2 - 1) || (wA == roundsToWin - 1 && wB == roundsToWin - 1 && round > 1);
-            string roundBanner = isFinalRound ? "FINAL ROUND" : $"ROUND {round}";
+            string roundBanner = isFinalRound
+                ? LocalizationManager.Pick("ROUND FINAL", "FINAL ROUND")
+                : $"ROUND {round}";
             AudioManager.PlayRoundIntroVoice(round, isFinalRound);
             yield return (showCenterRoutine = StartCoroutine(ShowCenter(roundBanner, 1.2f, 1f)));
             AudioManager.PlayFightVoice();
-            yield return (showCenterRoutine = StartCoroutine(ShowCenter("FIGHT!", 0.7f, 1.5f)));
+            yield return (showCenterRoutine = StartCoroutine(ShowCenter(LocalizationManager.Pick("LUTE!", "FIGHT!"), 0.7f, 1.5f)));
             yield return FadeFloat(v => hud.alpha = v, 0, 1, 0.3f);
         }
 
@@ -461,9 +505,11 @@ namespace EcclesiaFighters
         IEnumerator RoundResult(bool aWins)
         {
             yield return (showCenterRoutine = StartCoroutine(ShowCenter("K.O.", 1.1f, 1.2f)));
-            string winnerName = aWins ? (ctrlA ? ctrlA.characterName : "Jogador 1")
-                                      : (ctrlB ? ctrlB.characterName : "Jogador 2");
-            yield return (showCenterRoutine = StartCoroutine(ShowCenter(winnerName.ToUpper() + " VENCE!", 1.8f, 1f)));
+            string winnerName = aWins
+                ? (ctrlA != null ? ctrlA.characterName : LocalizationManager.Pick("Jogador 1", "Player 1"))
+                : (ctrlB != null ? ctrlB.characterName : LocalizationManager.Pick("Jogador 2", "Player 2"));
+            string winMsg = LocalizationManager.Pick(winnerName.ToUpper() + " VENCE!", winnerName.ToUpper() + " WINS!");
+            yield return (showCenterRoutine = StartCoroutine(ShowCenter(winMsg, 1.8f, 1f)));
             yield return new WaitForSeconds(0.5f);
 
             if (wA >= roundsToWin || wB >= roundsToWin)
@@ -486,11 +532,28 @@ namespace EcclesiaFighters
             bool soloHumanVsAI = p1AI != p2AI;
             bool humanWon      = (!p1AI && aWins) || (!p2AI && !aWins);
             bool isVictory     = !soloHumanVsAI || humanWon;
-            AudioManager.PlayMatchEnd(isVictory);
 
-            string winner = aWins ? (ctrlA ? ctrlA.characterName : "Jogador 1")
-                                  : (ctrlB ? ctrlB.characterName : "Jogador 2");
-            yield return (showCenterRoutine = StartCoroutine(ShowCenter(winner.ToUpper() + "\nVITÓRIA TOTAL!", 3f, 1.2f)));
+            int idxA = Clamp(PlayerPrefs.GetInt("SelectedCharA", 0));
+            int idxB = Clamp(PlayerPrefs.GetInt("SelectedCharB", 1));
+            int winnerIdx = aWins ? idxA : idxB;
+            bool churchWon = winnerIdx == 0;
+            AudioManager.PlayMatchEnd(isVictory, soloHumanVsAI, churchWon);
+
+            string winner = aWins
+                ? (ctrlA != null ? ctrlA.characterName : LocalizationManager.Pick("Jogador 1", "Player 1"))
+                : (ctrlB != null ? ctrlB.characterName : LocalizationManager.Pick("Jogador 2", "Player 2"));
+            string endBanner = LocalizationManager.Pick(
+                winner.ToUpper() + "\nVITÓRIA TOTAL!",
+                winner.ToUpper() + "\nTOTAL VICTORY!");
+            yield return (showCenterRoutine = StartCoroutine(ShowCenter(endBanner, 3f, 1.2f)));
+
+            float extraVoiceWait = 0f;
+            while (AudioManager.IsVoicePlaying && extraVoiceWait < 2.5f)
+            {
+                extraVoiceWait += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
             yield return FadeFloat(v => fadeOverlay.color = new Color(0,0,0,v), 0, 1, 0.6f);
             Time.timeScale = 1f;
             SceneManager.LoadScene("TitleScreen");

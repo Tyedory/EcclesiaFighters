@@ -27,6 +27,22 @@ namespace EcclesiaFighters
             if (toggleKey == KeyCode.H) toggleKey = KeyCode.Tab;
         }
 
+        void OnEnable()
+        {
+            LocalizationManager.OnLanguageChanged += OnLanguageChanged;
+        }
+
+        void OnDisable()
+        {
+            LocalizationManager.OnLanguageChanged -= OnLanguageChanged;
+        }
+
+        void OnLanguageChanged(GameLanguage _)
+        {
+            SyncLegendBindings();
+            Refresh();
+        }
+
         void Start()
         {
             expanded = startExpanded;
@@ -82,13 +98,23 @@ namespace EcclesiaFighters
 
             if (p1AI && p2AI)
             {
-                if (moveTxt) { moveTxt.text = "MODO ESPECTADOR  ·  IA vs IA";       moveTxt.color = ColBrightGold; }
-                if (atkTxt)  { atkTxt.text  = "ESC Pausar  ·  TAB Ocultar Dicas";  atkTxt.color  = ColIvory; }
+                if (moveTxt)
+                {
+                    moveTxt.text  = LocalizationManager.Pick("MODO ESPECTADOR  ·  IA vs IA", "SPECTATOR MODE  ·  AI vs AI");
+                    moveTxt.color = ColBrightGold;
+                }
+                if (atkTxt)
+                {
+                    atkTxt.text   = LocalizationManager.Pick("ESC Pausar  ·  TAB Ocultar Dicas", "ESC Pause  ·  TAB Hide Hints");
+                    atkTxt.color  = ColIvory;
+                }
             }
             else if (!p1AI && !p2AI)
             {
-                if (moveTxt) { moveTxt.text = "J1: " + FormatCompactPlayer(0); moveTxt.color = ColFaithBlue; }
-                if (atkTxt)  { atkTxt.text  = "J2: " + FormatCompactPlayer(1); atkTxt.color  = ColBrightGold; }
+                string p1Pre = LocalizationManager.Pick("J1: ", "P1: ");
+                string p2Pre = LocalizationManager.Pick("J2: ", "P2: ");
+                if (moveTxt) { moveTxt.text = p1Pre + FormatCompactPlayer(0); moveTxt.color = ColFaithBlue; }
+                if (atkTxt)  { atkTxt.text  = p2Pre + FormatCompactPlayer(1); atkTxt.color  = ColBrightGold; }
             }
             else
             {
@@ -138,7 +164,9 @@ namespace EcclesiaFighters
             string hp = FormatShortKey(KeybindManager.GetKey(playerIndex, FighterAction.HeavyPunch));
             string k  = FormatShortKey(KeybindManager.GetKey(playerIndex, FighterAction.Kick));
             string sp = FormatShortKey(KeybindManager.GetKey(playerIndex, FighterAction.Special));
-            return $"{l}/{r}/{j}/{c} Mov · {b} Def · {b}+{c} Carr · {lp}/{hp}/{k}/{sp}";
+            return LocalizationManager.Pick(
+                $"{l}/{r}/{j}/{c} Mov · {b} Def · {b}+{c} Carr · {lp}/{hp}/{k}/{sp}",
+                $"{l}/{r}/{j}/{c} Move · {b} Blk · {b}+{c} Chg · {lp}/{hp}/{k}/{sp}");
         }
 
         void Refresh()
@@ -147,9 +175,10 @@ namespace EcclesiaFighters
             if (toggleHintText)
             {
                 string keyLabel = KeybindManager.GetPrettyKeyName(toggleKey);
+                string pauseWord = LocalizationManager.Pick("PAUSAR", "PAUSE");
                 toggleHintText.text = expanded
-                    ? $"[{keyLabel}] OCULTAR  ·  [ESC] PAUSAR"
-                    : $"[{keyLabel}] CONTROLES  ·  [ESC] PAUSAR";
+                    ? $"[{keyLabel}] {LocalizationManager.Pick("OCULTAR", "HIDE")}  ·  [ESC] {pauseWord}"
+                    : $"[{keyLabel}] {LocalizationManager.Pick("CONTROLES", "CONTROLS")}  ·  [ESC] {pauseWord}";
             }
         }
     }

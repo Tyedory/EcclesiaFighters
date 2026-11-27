@@ -53,12 +53,7 @@ namespace EcclesiaFighters
 
         void OnEnable()
         {
-            // Populate VS bar from PlayerPrefs
-            int idxA = PlayerPrefs.GetInt("SelectedCharA", 0);
-            int idxB = PlayerPrefs.GetInt("SelectedCharB", 1);
-            string[] names = { "Santo Agostinho", "Karl Marx" };
-            if (nameA != null) nameA.text = names[Mathf.Clamp(idxA, 0, names.Length - 1)].ToUpper();
-            if (nameB != null) nameB.text = names[Mathf.Clamp(idxB, 0, names.Length - 1)].ToUpper();
+            LocalizationManager.OnLanguageChanged += OnLanguageChanged;
 
             if (cardExterior != null)
             {
@@ -79,8 +74,103 @@ namespace EcclesiaFighters
             if (goBtn != null) goBtn.interactable = false;
 
             EnsureMatchRulesUI();
+            ApplyLocalization();
             RefreshMatchRulesUI();
             EnforceOverlayLayering();
+        }
+
+        void OnDisable()
+        {
+            LocalizationManager.OnLanguageChanged -= OnLanguageChanged;
+        }
+
+        void OnLanguageChanged(GameLanguage _)
+        {
+            ApplyLocalization();
+            RefreshMatchRulesUI();
+        }
+
+        public void ApplyLocalization()
+        {
+            int idxA = PlayerPrefs.GetInt("SelectedCharA", 0);
+            int idxB = PlayerPrefs.GetInt("SelectedCharB", 1);
+            if (nameA != null) nameA.text = LocalizationManager.GetFighterName(idxA).ToUpper();
+            if (nameB != null) nameB.text = LocalizationManager.GetFighterName(idxB).ToUpper();
+
+            Transform rootTf = cardExterior != null ? cardExterior.transform.parent : null;
+            if (rootTf != null)
+            {
+                SetTextChild(rootTf, "HeaderBanner/Header", LocalizationManager.Pick("ESCOLHA O CAMPO DE BATALHA", "CHOOSE THE BATTLEGROUND"));
+                SetButtonLabel(rootTf, "Btn_Voltar", LocalizationManager.Pick("VOLTAR", "BACK"));
+            }
+
+            if (goBtn != null)
+            {
+                Text goTxt = goBtn.GetComponentInChildren<Text>(true);
+                if (goTxt != null) goTxt.text = LocalizationManager.Pick("INICIAR LUTA", "START FIGHT");
+            }
+
+            if (cardExterior != null)
+            {
+                SetTextChild(cardExterior.transform, "LabelBar/Label",    LocalizationManager.GetStageName(false).ToUpper());
+                SetTextChild(cardExterior.transform, "LabelBar/Subtitle", LocalizationManager.GetStageSubtitle(false));
+            }
+            if (cardInterior != null)
+            {
+                SetTextChild(cardInterior.transform, "LabelBar/Label",    LocalizationManager.GetStageName(true).ToUpper());
+                SetTextChild(cardInterior.transform, "LabelBar/Subtitle", LocalizationManager.GetStageSubtitle(true));
+            }
+
+            if (matchRulesPanel != null)
+            {
+                Transform mr = matchRulesPanel.transform;
+                SetTextChild(mr, "RulesHeader",                       LocalizationManager.Pick("✦  REGRAS DA PARTIDA  ✦", "✦  MATCH RULES  ✦"));
+                SetTextChild(mr, "RulesBody/Col_AIDifficulty/Label",  LocalizationManager.Pick("DIFICULDADE IA", "AI DIFFICULTY"));
+                SetTextChild(mr, "RulesBody/Col_Duration/Label",      LocalizationManager.Pick("TEMPO DO ROUND", "ROUND TIME"));
+                SetTextChild(mr, "RulesBody/Col_HPPreset/Label",      LocalizationManager.Pick("VIDA (HP)", "HEALTH (HP)"));
+            }
+
+            if (difficultyButtons != null)
+            {
+                SetBtnLabel(difficultyButtons.Length > 0 ? difficultyButtons[0] : null, LocalizationManager.Pick("FÁCIL",   "EASY"));
+                SetBtnLabel(difficultyButtons.Length > 1 ? difficultyButtons[1] : null, "NORMAL");
+                SetBtnLabel(difficultyButtons.Length > 2 ? difficultyButtons[2] : null, LocalizationManager.Pick("DIFÍCIL", "HARD"));
+            }
+
+            if (hpButtons != null)
+            {
+                SetBtnLabel(hpButtons.Length > 0 ? hpButtons[0] : null, LocalizationManager.Pick("BAIXO", "LOW"));
+                SetBtnLabel(hpButtons.Length > 1 ? hpButtons[1] : null, LocalizationManager.Pick("MÉDIO", "MEDIUM"));
+                SetBtnLabel(hpButtons.Length > 2 ? hpButtons[2] : null, LocalizationManager.Pick("ALTO",  "HIGH"));
+            }
+
+            if (fightOverlay != null)
+                SetTextChild(fightOverlay.transform, "IntroFrame/Prepare", LocalizationManager.Pick("PREPARE-SE PARA A LUTA", "PREPARE FOR BATTLE"));
+        }
+
+        static void SetTextChild(Transform parent, string path, string text)
+        {
+            if (parent == null) return;
+            Transform tf = parent.Find(path);
+            if (tf == null) return;
+            Text t = tf.GetComponent<Text>();
+            if (t != null) t.text = text;
+        }
+
+        static void SetButtonLabel(Transform parent, string path, string text)
+        {
+            if (parent == null) return;
+            Transform tf = parent.Find(path);
+            if (tf == null) return;
+            Text t = tf.GetComponentInChildren<Text>(true);
+            if (t != null) t.text = text;
+        }
+
+        static void SetBtnLabel(Button btn, string text)
+        {
+            if (btn == null) return;
+            Text t = btn.GetComponentInChildren<Text>(true);
+            if (t != null) t.text = text;
         }
 
         // ══════════════════════════════════════════════════════
@@ -139,7 +229,7 @@ namespace EcclesiaFighters
             EnforceOverlayLayering();
             // Show fight overlay
             fightOverlay.alpha = 0; fightOverlay.gameObject.SetActive(true);
-            if (fightMapText != null)   fightMapText.text   = selectedMap == MapID.Exterior ? "Nave Central" : "Altar Sagrado";
+            if (fightMapText != null)   fightMapText.text   = LocalizationManager.GetStageName(selectedMap == MapID.Interior);
             if (fightNamesText != null) fightNamesText.text = nameA.text + " · " + nameB.text;
             // Fade in overlay
             float t = 0;
@@ -227,7 +317,7 @@ namespace EcclesiaFighters
             {
                 aiRuleNoteText.gameObject.SetActive(bothHuman);
                 if (bothHuman)
-                    aiRuleNoteText.text = "MODO 2P LOCAL · IA DESATIVADA";
+                    aiRuleNoteText.text = LocalizationManager.Pick("MODO 2P LOCAL · IA DESATIVADA", "2P LOCAL MODE · AI DISABLED");
             }
         }
 

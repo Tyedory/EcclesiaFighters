@@ -24,6 +24,8 @@ namespace EcclesiaFighters.EditorTools
         const string KarlBaseModelPath  = "Assets/EcclesiaFighters/Animations/KarlMarx/Karl marx.fbx";
         const string CleanGoldMatPath     = AnimDir + "SantoAgostinho_SacredGold.mat";
         const string CleanBurgundyMatPath = AnimDir + "SantoAgostinho_Burgundy.mat";
+        const string TexturesDir          = AnimDir + "Textures/";
+        const string GoldenMatPath        = AnimDir + "SantoAgostinho_GoldenBenediction.mat";
         const string SantoProjPrefabPath  = "Assets/EcclesiaFighters/Models/Projectiles/Santo/SantoSpecialProjectile.prefab";
 
         const string VisualChildName = "SantoAgostinhoVisual";
@@ -799,23 +801,38 @@ namespace EcclesiaFighters.EditorTools
                 foreach (AudioListener l in visualGo.GetComponentsInChildren<AudioListener>(true)) l.enabled = false;
                 foreach (Light lt in visualGo.GetComponentsInChildren<Light>(true))            lt.gameObject.SetActive(false);
 
-                // Replace missing, default, or mismatched Meshy static UV textures with clean untextured Sacred Gold / Burgundy
-                Material cleanGold     = GetOrCreateCleanSantoMaterial(CleanGoldMatPath,     new Color(0.80f, 0.62f, 0.27f, 1f), metallic: 0.18f, smoothness: 0.40f);
-                Material cleanBurgundy = GetOrCreateCleanSantoMaterial(CleanBurgundyMatPath, new Color(0.45f, 0.09f, 0.14f, 1f), metallic: 0.08f, smoothness: 0.30f);
-                foreach (Renderer r in visualGo.GetComponentsInChildren<Renderer>(true))
+                // Apply Golden_Benediction PBR textures & material if found in TexturesDir; fallback cleanly otherwise
+                Material goldenMat = BuildOrUpdateGoldenBenedictionMaterial();
+                if (goldenMat != null)
                 {
-                    Material[] mats = r.sharedMaterials;
-                    for (int i = 0; i < mats.Length; i++)
+                    foreach (Renderer r in visualGo.GetComponentsInChildren<Renderer>(true))
                     {
-                        if (NeedsCleanSantoMaterial(mats[i]))
-                            mats[i] = (i % 2 == 0) ? cleanGold : cleanBurgundy;
+                        Material[] mats = r.sharedMaterials;
+                        for (int i = 0; i < mats.Length; i++)
+                            mats[i] = goldenMat;
+                        r.sharedMaterials = mats;
                     }
-                    r.sharedMaterials = mats;
+                }
+                else
+                {
+                    Material cleanGold     = GetOrCreateCleanSantoMaterial(CleanGoldMatPath,     new Color(0.80f, 0.62f, 0.27f, 1f), metallic: 0.18f, smoothness: 0.40f);
+                    Material cleanBurgundy = GetOrCreateCleanSantoMaterial(CleanBurgundyMatPath, new Color(0.45f, 0.09f, 0.14f, 1f), metallic: 0.08f, smoothness: 0.30f);
+                    foreach (Renderer r in visualGo.GetComponentsInChildren<Renderer>(true))
+                    {
+                        Material[] mats = r.sharedMaterials;
+                        for (int i = 0; i < mats.Length; i++)
+                        {
+                            if (NeedsCleanSantoMaterial(mats[i]))
+                                mats[i] = (i % 2 == 0) ? cleanGold : cleanBurgundy;
+                        }
+                        r.sharedMaterials = mats;
+                    }
                 }
 
                 FitVisualToCapsule(root, visualGo.transform);
 
-                Animator rigAnim = visualGo.GetComponent<Animator>() ?? visualGo.AddComponent<Animator>();
+                Animator rigAnim = visualGo.GetComponent<Animator>();
+                if (rigAnim == null) rigAnim = visualGo.AddComponent<Animator>();
                 rigAnim.runtimeAnimatorController = controller;
                 rigAnim.avatar                    = santoAvatar;
                 rigAnim.applyRootMotion           = false;
@@ -881,9 +898,209 @@ namespace EcclesiaFighters.EditorTools
             }
         }
 
+        static Material BuildOrUpdateGoldenBenedictionMaterial()
+        {
+            if (!Directory.Exists(TexturesDir))
+            {
+                Debug.LogWarning("[SantoAnimatorSetup] Textures directory not found at: " + TexturesDir);
+                return null;
+            }
+
+            FindGoldenBenedictionTextures(
+                out string albedoPath,
+                out string normalPath,
+                out string metallicPath,
+                out string roughnessPath);
+
+            if (string.IsNullOrEmpty(albedoPath))
+            {
+                Debug.LogWarning("[SantoAnimatorSetup] Golden_Benediction albedo texture not found in: " + TexturesDir);
+                return null;
+            }
+
+            if (!string.IsNullOrEmpty(normalPath))
+                EnsureNormalMapImporter(normalPath);
+
+            Texture2D albedoTex = AssetDatabase.LoadAssetAtPath<Texture2D>(albedoPath);
+            Texture2D normalTex = !string.IsNullOrEmpty(normalPath) ? AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath) : null;
+            Texture2D msTex     = BuildMetallicSmoothnessMap(TexturesDir, metallicPath, roughnessPath);
+
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) shader = Shader.Find("Standard");
+
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(GoldenMatPath);
+            if (mat == null)
+            {
+                mat = new Material(shader);
+                AssetDatabase.CreateAsset(mat, GoldenMatPath);
+            }
+            else if (mat.shader != shader)
+            {
+                mat.shader = shader;
+            }
+
+            mat.color = Color.white;
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
+            if (mat.HasProperty("_Color"))     mat.SetColor("_Color", Color.white);
+
+            if (albedoTex != null)
+            {
+                mat.mainTexture = albedoTex;
+                if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", albedoTex);
+                if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", albedoTex);
+            }
+
+            if (normalTex != null)
+            {
+                mat.EnableKeyword("_NORMALMAP");
+                if (mat.HasProperty("_BumpMap"))   mat.SetTexture("_BumpMap", normalTex);
+                if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 1.0f);
+            }
+            else
+            {
+                mat.DisableKeyword("_NORMALMAP");
+                if (mat.HasProperty("_BumpMap")) mat.SetTexture("_BumpMap", null);
+            }
+
+            if (msTex != null)
+            {
+                mat.EnableKeyword("_METALLICSPECGLOSSMAP");
+                if (mat.HasProperty("_MetallicGlossMap"))         mat.SetTexture("_MetallicGlossMap", msTex);
+                if (mat.HasProperty("_Metallic"))                 mat.SetFloat("_Metallic", 1.0f);
+                if (mat.HasProperty("_Smoothness"))               mat.SetFloat("_Smoothness", 1.0f);
+                if (mat.HasProperty("_GlossMapScale"))            mat.SetFloat("_GlossMapScale", 1.0f);
+                if (mat.HasProperty("_Glossiness"))               mat.SetFloat("_Glossiness", 1.0f);
+                if (mat.HasProperty("_SmoothnessTextureChannel")) mat.SetFloat("_SmoothnessTextureChannel", 0f);
+            }
+            else
+            {
+                mat.DisableKeyword("_METALLICSPECGLOSSMAP");
+                if (mat.HasProperty("_Metallic"))   mat.SetFloat("_Metallic", 0.25f);
+                if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.50f);
+                if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", 0.50f);
+            }
+
+            EditorUtility.SetDirty(mat);
+            Debug.Log("[SantoAnimatorSetup] Wired Golden_Benediction PBR material at " + GoldenMatPath);
+            return mat;
+        }
+
+        static void FindGoldenBenedictionTextures(
+            out string albedoPath,
+            out string normalPath,
+            out string metallicPath,
+            out string roughnessPath)
+        {
+            albedoPath    = null;
+            normalPath    = null;
+            metallicPath  = null;
+            roughnessPath = null;
+
+            string[] files = Directory.GetFiles(TexturesDir, "*.*", SearchOption.TopDirectoryOnly);
+            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+
+            for (int pass = 0; pass < 2; pass++)
+            {
+                bool requireGoldenTag = pass == 0;
+                for (int i = 0; i < files.Length; i++)
+                {
+                    string raw = files[i];
+                    string ext = Path.GetExtension(raw).ToLowerInvariant();
+                    if (ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".tga") continue;
+
+                    string p    = raw.Replace('\\', '/');
+                    string name = Path.GetFileNameWithoutExtension(p).ToLowerInvariant();
+                    if (name.Contains("metallicsmoothness")) continue;
+                    if (requireGoldenTag && !name.Contains("golden_benediction")) continue;
+
+                    if (name.Contains("normal"))             { if (string.IsNullOrEmpty(normalPath))    normalPath    = p; }
+                    else if (name.Contains("metallic"))      { if (string.IsNullOrEmpty(metallicPath))  metallicPath  = p; }
+                    else if (name.Contains("roughness"))     { if (string.IsNullOrEmpty(roughnessPath)) roughnessPath = p; }
+                    else                                     { if (string.IsNullOrEmpty(albedoPath))    albedoPath    = p; }
+                }
+            }
+        }
+
+        static void EnsureNormalMapImporter(string assetPath)
+        {
+            var imp = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (imp != null && imp.textureType != TextureImporterType.NormalMap)
+            {
+                imp.textureType = TextureImporterType.NormalMap;
+                imp.SaveAndReimport();
+            }
+        }
+
+        static Texture2D EnsureReadableLinearTexture(string assetPath)
+        {
+            if (string.IsNullOrEmpty(assetPath)) return null;
+            var imp = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (imp != null)
+            {
+                bool dirty = false;
+                if (imp.textureType != TextureImporterType.Default) { imp.textureType = TextureImporterType.Default; dirty = true; }
+                if (imp.sRGBTexture)                                 { imp.sRGBTexture = false;                       dirty = true; }
+                if (!imp.isReadable)                                 { imp.isReadable  = true;                        dirty = true; }
+                if (dirty) imp.SaveAndReimport();
+            }
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+        }
+
+        static Texture2D BuildMetallicSmoothnessMap(string folder, string metallicPath, string roughnessPath)
+        {
+            Texture2D metTex   = EnsureReadableLinearTexture(metallicPath);
+            Texture2D roughTex = EnsureReadableLinearTexture(roughnessPath);
+            if (metTex == null && roughTex == null) return null;
+
+            int w = metTex != null ? metTex.width : roughTex.width;
+            int h = metTex != null ? metTex.height : roughTex.height;
+
+            var combined = new Texture2D(w, h, TextureFormat.RGBA32, false, linear: true);
+            Color[] metPixels = (metTex != null && metTex.width == w && metTex.height == h) ? metTex.GetPixels() : null;
+            Color[] rghPixels = (roughTex != null && roughTex.width == w && roughTex.height == h) ? roughTex.GetPixels() : null;
+            Color[] outPixels = new Color[w * h];
+
+            for (int y = 0; y < h; y++)
+            {
+                float v = (y + 0.5f) / h;
+                for (int x = 0; x < w; x++)
+                {
+                    int idx = y * w + x;
+                    float m = 0f;
+                    if (metPixels != null) m = metPixels[idx].r;
+                    else if (metTex != null) m = metTex.GetPixelBilinear((x + 0.5f) / w, v).r;
+
+                    float r = 0.5f;
+                    if (rghPixels != null) r = rghPixels[idx].r;
+                    else if (roughTex != null) r = roughTex.GetPixelBilinear((x + 0.5f) / w, v).r;
+
+                    outPixels[idx] = new Color(m, m, m, Mathf.Clamp01(1f - r));
+                }
+            }
+
+            combined.SetPixels(outPixels);
+            combined.Apply(false, false);
+
+            string outPath = folder + "SantoAgostinho_GoldenBenediction_MetallicSmoothness.png";
+            File.WriteAllBytes(outPath, combined.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(combined);
+
+            AssetDatabase.ImportAsset(outPath, ImportAssetOptions.ForceUpdate);
+            var outImp = AssetImporter.GetAtPath(outPath) as TextureImporter;
+            if (outImp != null)
+            {
+                outImp.textureType         = TextureImporterType.Default;
+                outImp.sRGBTexture         = false;
+                outImp.alphaIsTransparency = false;
+                outImp.isReadable          = false;
+                outImp.SaveAndReimport();
+            }
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(outPath);
+        }
+
         static bool NeedsCleanSantoMaterial(Material mat)
         {
-            if (!mat) return true;
+            if (mat == null) return true;
             if (mat.mainTexture == null) return true;
             string path = AssetDatabase.GetAssetPath(mat);
             if (!string.IsNullOrEmpty(path) && path.IndexOf("Meshy_AI_The_Golden_Benedictio", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -896,8 +1113,9 @@ namespace EcclesiaFighters.EditorTools
         static Material GetOrCreateCleanSantoMaterial(string assetPath, Color color, float metallic, float smoothness)
         {
             Material mat = AssetDatabase.LoadAssetAtPath<Material>(assetPath);
-            Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            if (!mat)
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) shader = Shader.Find("Standard");
+            if (mat == null)
             {
                 mat = new Material(shader);
                 AssetDatabase.CreateAsset(mat, assetPath);

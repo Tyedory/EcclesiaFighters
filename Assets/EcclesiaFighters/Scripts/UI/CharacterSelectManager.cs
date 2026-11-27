@@ -49,6 +49,19 @@ namespace EcclesiaFighters
         private int selectedA = -1;
         private int selectedB = -1;
 
+        void OnEnable()
+        {
+            LocalizationManager.OnLanguageChanged += OnLanguageChanged;
+            ApplyLocalization();
+        }
+
+        void OnDisable()
+        {
+            LocalizationManager.OnLanguageChanged -= OnLanguageChanged;
+        }
+
+        void OnLanguageChanged(GameLanguage _) => ApplyLocalization();
+
         void Start()
         {
             p1IsAI = PlayerPrefs.GetInt("P1IsAI", p1IsAI ? 1 : 0) == 1;
@@ -63,7 +76,70 @@ namespace EcclesiaFighters
                 if (characters[i].faction == "Ideology"  && selectedB < 0) SelectB(i);
             }
 
+            ApplyLocalization();
+        }
+
+        public void ApplyLocalization()
+        {
             RefreshControlModeUI();
+            if (selectedA >= 0) Apply(selectedA, portraitA, nameA, descA, new Color(0.56f, 0.84f, 1f));
+            if (selectedB >= 0) Apply(selectedB, portraitB, nameB, descB, new Color(0.95f, 0.38f, 0.40f));
+
+            UpdateButtonText(p1HumanBtn, LocalizationManager.Pick("JOGADOR", "PLAYER"));
+            UpdateButtonText(p1AIBtn,    LocalizationManager.Pick("IA",      "AI"));
+            UpdateButtonText(p2HumanBtn, LocalizationManager.Pick("JOGADOR", "PLAYER"));
+            UpdateButtonText(p2AIBtn,    LocalizationManager.Pick("IA",      "AI"));
+
+            UpdateRosterButtonsLocalization(buttonsA);
+            UpdateRosterButtonsLocalization(buttonsB);
+
+            Transform rootTf = portraitA != null ? portraitA.transform.root : (nameA != null ? nameA.transform.root : null);
+            if (rootTf == null)
+            {
+                Canvas c = FindObjectOfType<Canvas>();
+                if (c != null) rootTf = c.transform;
+            }
+            if (rootTf != null)
+            {
+                SetTextAt(rootTf, "HeaderBanner/Header", LocalizationManager.Pick("ESCOLHA SEU LUTADOR", "CHOOSE YOUR FIGHTER"));
+                SetTextAt(rootTf, "PlayerCardA/StyleBadge", LocalizationManager.Pick("ESTILO: LUZ SAGRADA & CONTRA-ATAQUE", "STYLE: SACRED LIGHT & COUNTER"));
+                SetTextAt(rootTf, "PlayerCardB/StyleBadge", LocalizationManager.Pick("ESTILO: PRESSÃO & LONGO ALCANCE", "STYLE: PRESSURE & LONG RANGE"));
+                SetButtonTextAt(rootTf, "Btn_Confirmar", LocalizationManager.Pick("CONFIRMAR", "CONFIRM"));
+                SetButtonTextAt(rootTf, "Btn_Voltar",    LocalizationManager.Pick("VOLTAR",    "BACK"));
+            }
+
+            if (confirmText != null && !IsInvoking(nameof(GotoMap)))
+                confirmText.text = LocalizationManager.Pick("Selecione os lutadores e confirme", "Select your fighters and confirm");
+        }
+
+        void UpdateRosterButtonsLocalization(Button[] btns)
+        {
+            if (btns == null) return;
+            for (int i = 0; i < btns.Length; i++)
+                UpdateButtonText(btns[i], LocalizationManager.GetFighterName(i).ToUpper());
+        }
+
+        static void UpdateButtonText(Button btn, string label)
+        {
+            if (btn == null) return;
+            Text t = btn.GetComponentInChildren<Text>(true);
+            if (t != null) t.text = label;
+        }
+
+        static void SetTextAt(Transform root, string path, string text)
+        {
+            Transform tf = root.Find(path);
+            if (tf == null) return;
+            Text t = tf.GetComponent<Text>();
+            if (t != null) t.text = text;
+        }
+
+        static void SetButtonTextAt(Transform root, string path, string text)
+        {
+            Transform tf = root.Find(path);
+            if (tf == null) return;
+            Text t = tf.GetComponentInChildren<Text>(true);
+            if (t != null) t.text = text;
         }
 
         public void SetP1IsAI(bool isAI)
@@ -88,8 +164,13 @@ namespace EcclesiaFighters
             UpdatePairHighlight(p1HumanBtn, p1AIBtn, !p1IsAI);
             UpdatePairHighlight(p2HumanBtn, p2AIBtn, !p2IsAI);
 
-            if (tagTextA) tagTextA.text = (p1IsAI ? "CPU 1" : "JOGADOR 1") + "  ·  ORDEM DA FÉ";
-            if (tagTextB) tagTextB.text = (p2IsAI ? "CPU 2" : "JOGADOR 2") + "  ·  VANGUARDA IDEOLÓGICA";
+            string p1Slot = p1IsAI ? "CPU 1" : LocalizationManager.Pick("JOGADOR 1", "PLAYER 1");
+            string p2Slot = p2IsAI ? "CPU 2" : LocalizationManager.Pick("JOGADOR 2", "PLAYER 2");
+            string faithFaction = LocalizationManager.Pick("ORDEM DA FÉ", "ORDER OF FAITH");
+            string ideoFaction  = LocalizationManager.Pick("VANGUARDA IDEOLÓGICA", "IDEOLOGICAL VANGUARD");
+
+            if (tagTextA) tagTextA.text = $"{p1Slot}  ·  {faithFaction}";
+            if (tagTextB) tagTextB.text = $"{p2Slot}  ·  {ideoFaction}";
         }
 
         static void UpdatePairHighlight(Button humanBtn, Button aiBtn, bool humanActive)
@@ -245,8 +326,8 @@ namespace EcclesiaFighters
         {
             var c = characters[idx];
             if (img) img.sprite = c.portrait;
-            if (nm)  { nm.text = c.characterName.ToUpper(); nm.color = col; }
-            if (dsc) dsc.text = c.description;
+            if (nm)  { nm.text = LocalizationManager.GetFighterName(idx).ToUpper(); nm.color = col; }
+            if (dsc) dsc.text = LocalizationManager.GetFighterDescription(idx);
         }
 
         public void OnConfirm()
@@ -260,9 +341,10 @@ namespace EcclesiaFighters
             PlayerPrefs.Save();
             if (confirmText)
             {
-                string mA = p1IsAI ? "IA" : "J1";
-                string mB = p2IsAI ? "IA" : "J2";
-                confirmText.text = $"✦ {characters[selectedA].characterName.ToUpper()} ({mA})  VS  {characters[selectedB].characterName.ToUpper()} ({mB}) ✦";
+                string aiLbl = LocalizationManager.Pick("IA", "AI");
+                string mA = p1IsAI ? aiLbl : LocalizationManager.Pick("J1", "P1");
+                string mB = p2IsAI ? aiLbl : LocalizationManager.Pick("J2", "P2");
+                confirmText.text = $"✦ {LocalizationManager.GetFighterName(selectedA).ToUpper()} ({mA})  VS  {LocalizationManager.GetFighterName(selectedB).ToUpper()} ({mB}) ✦";
             }
             // Go to map select after short delay
             Invoke(nameof(GotoMap), 0.8f);

@@ -41,8 +41,60 @@ namespace EcclesiaFighters
         private readonly Color normalColor   = new Color(0.96f, 0.93f, 0.86f);
         private readonly Color selectedColor = new Color(1.00f, 0.84f, 0.30f);
 
+        void OnEnable()
+        {
+            LocalizationManager.OnLanguageChanged += OnLanguageChanged;
+            ApplyLocalization();
+        }
+
+        void OnDisable()
+        {
+            LocalizationManager.OnLanguageChanged -= OnLanguageChanged;
+        }
+
+        void OnLanguageChanged(GameLanguage _) => ApplyLocalization();
+
+        public void ApplyLocalization()
+        {
+            if (titlePanel != null)
+            {
+                Transform subTf = titlePanel.transform.Find("TitleLogo/Subtitle");
+                if (subTf != null)
+                {
+                    Text subTxt = subTf.GetComponent<Text>();
+                    if (subTxt != null)
+                        subTxt.text = LocalizationManager.Pick("FÉ  ×  IDEOLOGIA", "FAITH  ×  IDEOLOGY");
+                }
+
+                Transform hintTf = titlePanel.transform.Find("NavHint");
+                if (hintTf != null)
+                {
+                    Text hintTxt = hintTf.GetComponent<Text>();
+                    if (hintTxt != null)
+                        hintTxt.text = LocalizationManager.Pick(
+                            "USE ↑ ↓ E ENTER OU CLIQUE PARA NAVEGAR",
+                            "USE ↑ ↓ AND ENTER OR CLICK TO NAVIGATE");
+                }
+            }
+
+            if (menuButtons != null)
+            {
+                SetButtonLabel(menuButtons.Length > 0 ? menuButtons[0] : null, LocalizationManager.Pick("JOGAR", "PLAY"));
+                SetButtonLabel(menuButtons.Length > 1 ? menuButtons[1] : null, LocalizationManager.Pick("CONFIGURAÇÕES", "SETTINGS"));
+                SetButtonLabel(menuButtons.Length > 2 ? menuButtons[2] : null, LocalizationManager.Pick("SAIR", "QUIT"));
+            }
+        }
+
+        static void SetButtonLabel(Button btn, string text)
+        {
+            if (btn == null) return;
+            Text lbl = btn.GetComponentInChildren<Text>(true);
+            if (lbl != null) lbl.text = text;
+        }
+
         void Start()
         {
+            ApplyLocalization();
             if (titlePanel != null)      titlePanel.SetActive(true);
             if (charSelectPanel != null) charSelectPanel.SetActive(false);
             if (mapSelectPanel != null)  mapSelectPanel.SetActive(false);

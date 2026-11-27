@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
@@ -7,12 +8,14 @@ namespace EcclesiaFighters.EditorTools
     /// <summary>
     /// Editor utility that creates and wires Assets/Resources/EcclesiaAudioLibrary.asset
     /// from Assets/EcclesiaFighters/Audio/ with balanced default per-clip volume scales.
+    /// Automatically converts any .mpeg announcer clips in Voices/PT to .mp3 so Unity imports them cleanly.
     /// </summary>
     public static class AudioSetupTool
     {
-        const string AudioRoot = "Assets/EcclesiaFighters/Audio/";
-        const string AssetDir  = "Assets/Resources";
-        const string AssetPath = AssetDir + "/EcclesiaAudioLibrary.asset";
+        const string AudioRoot    = "Assets/EcclesiaFighters/Audio/";
+        const string PtVoicesDir  = AudioRoot + "Voices/PT";
+        const string AssetDir     = "Assets/Resources";
+        const string AssetPath    = AssetDir + "/EcclesiaAudioLibrary.asset";
 
         [InitializeOnLoadMethod]
         static void AutoEnsureLibraryOnLoad()
@@ -21,8 +24,8 @@ namespace EcclesiaFighters.EditorTools
             {
                 if (EditorApplication.isPlayingOrWillChangePlaymode) return;
                 var lib = AssetDatabase.LoadAssetAtPath<AudioLibrary>(AssetPath);
-                if (!lib || !lib.HasAllClipsAssigned())
-                    WireAllAudioAssets(forceDefaultScales: !lib, logSummary: true);
+                if (lib == null || !lib.HasAllClipsAssigned() || HasUnconvertedMpegVoices())
+                    WireAllAudioAssets(forceDefaultScales: lib == null, logSummary: true);
             };
         }
 
@@ -30,16 +33,18 @@ namespace EcclesiaFighters.EditorTools
         public static void WireAllAudioAssetsMenu()
         {
             AudioLibrary lib = WireAllAudioAssets(forceDefaultScales: true, logSummary: true);
-            if (lib) Selection.activeObject = lib;
+            if (lib != null) Selection.activeObject = lib;
         }
 
         public static AudioLibrary WireAllAudioAssets(bool forceDefaultScales = false, bool logSummary = true)
         {
+            ConvertMpegVoicesToMp3();
+
             if (!AssetDatabase.IsValidFolder(AssetDir))
                 AssetDatabase.CreateFolder("Assets", "Resources");
 
             AudioLibrary lib = AssetDatabase.LoadAssetAtPath<AudioLibrary>(AssetPath);
-            if (!lib)
+            if (lib == null)
             {
                 lib = ScriptableObject.CreateInstance<AudioLibrary>();
                 AssetDatabase.CreateAsset(lib, AssetPath);
@@ -72,7 +77,7 @@ namespace EcclesiaFighters.EditorTools
             WireCue(ref lib.sfxVictory,       "SFX/sfx_victory.wav",        0.85f, forceDefaultScales, ref wired, ref missing);
             WireCue(ref lib.sfxDefeat,        "SFX/sfx_defeat.wav",         0.85f, forceDefaultScales, ref wired, ref missing);
 
-            // ── Announcer Voices ─────────────────────────────────────
+            // ── Announcer Voices (EN) ────────────────────────────────
             WireCue(ref lib.voRound1,     "Voices/vo_Round1.wav",     1.00f, forceDefaultScales, ref wired, ref missing);
             WireCue(ref lib.voRound2,     "Voices/vo_Round2.wav",     1.00f, forceDefaultScales, ref wired, ref missing);
             WireCue(ref lib.voFinalRound, "Voices/vo_FinalRound.wav", 1.00f, forceDefaultScales, ref wired, ref missing);
@@ -80,6 +85,15 @@ namespace EcclesiaFighters.EditorTools
             WireCue(ref lib.voKo,         "Voices/vo_ko.wav",         1.00f, forceDefaultScales, ref wired, ref missing);
             WireCue(ref lib.voVictory,    "Voices/vo_Victory.wav",    1.00f, forceDefaultScales, ref wired, ref missing);
             WireCue(ref lib.voDefeat,     "Voices/vo_Defeat.wav",     1.00f, forceDefaultScales, ref wired, ref missing);
+
+            // ── Announcer Voices (PT-BR) ─────────────────────────────
+            WireCue(ref lib.vopRound1,         "Voices/PT/vop_Round1.mp3",         1.00f, forceDefaultScales, ref wired, ref missing);
+            WireCue(ref lib.vopRound2,         "Voices/PT/vop_Round2.mp3",         1.00f, forceDefaultScales, ref wired, ref missing);
+            WireCue(ref lib.vopRoundFinal,     "Voices/PT/vop_RoundFinal.mp3",     1.00f, forceDefaultScales, ref wired, ref missing);
+            WireCue(ref lib.vopVitoria,        "Voices/PT/vop_Vitoria.mp3",        1.00f, forceDefaultScales, ref wired, ref missing);
+            WireCueAny(ref lib.vopDerrota, new[] { "Voices/PT/vop_Derrrota.mp3", "Voices/PT/vop_Derrota.mp3" }, 1.00f, forceDefaultScales, ref wired, ref missing);
+            WireCue(ref lib.vopIgrejaVence,    "Voices/PT/vop_IgrejaVence.mp3",    1.00f, forceDefaultScales, ref wired, ref missing);
+            WireCue(ref lib.vopComunismoVence, "Voices/PT/vop_ComunismoVence.mp3", 1.00f, forceDefaultScales, ref wired, ref missing);
 
             EditorUtility.SetDirty(lib);
             AssetDatabase.SaveAssets();
@@ -93,27 +107,86 @@ namespace EcclesiaFighters.EditorTools
             return lib;
         }
 
+        static bool HasUnconvertedMpegVoices()
+        {
+            if (!Directory.Exists(PtVoicesDir)) return false;
+            string[] files = Directory.GetFiles(PtVoicesDir, "*.*", SearchOption.AllDirectories);
+            for (int i = 0; i < files.Length; i++)
+            {
+                if (string.Equals(Path.GetExtension(files[i]), ".mpeg", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        static void ConvertMpegVoicesToMp3()
+        {
+            if (!Directory.Exists(PtVoicesDir)) return;
+
+            bool renamedAny = false;
+            string[] files = Directory.GetFiles(PtVoicesDir, "*.*", SearchOption.AllDirectories);
+            for (int i = 0; i < files.Length; i++)
+            {
+                string srcPath = files[i];
+                if (!string.Equals(Path.GetExtension(srcPath), ".mpeg", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string dstPath = Path.ChangeExtension(srcPath, ".mp3");
+                if (!File.Exists(dstPath))
+                {
+                    File.Move(srcPath, dstPath);
+                    string srcMeta = srcPath + ".meta";
+                    if (File.Exists(srcMeta)) File.Delete(srcMeta);
+                    renamedAny = true;
+                }
+            }
+
+            if (renamedAny)
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+        }
+
         static void WireCue(ref AudioCue cue, string relativePath, float defaultScale, bool forceScale, ref int wired, ref int missing)
         {
-            string fullPath = AudioRoot + relativePath;
-            AudioClip clip  = AssetDatabase.LoadAssetAtPath<AudioClip>(fullPath);
+            WireCueAny(ref cue, new[] { relativePath }, defaultScale, forceScale, ref wired, ref missing);
+        }
 
-            if (!clip)
+        static void WireCueAny(ref AudioCue cue, string[] relativeCandidates, float defaultScale, bool forceScale, ref int wired, ref int missing)
+        {
+            AudioClip clip = null;
+            string firstPath = relativeCandidates != null && relativeCandidates.Length > 0
+                ? AudioRoot + relativeCandidates[0]
+                : AudioRoot;
+
+            if (relativeCandidates != null)
             {
-                string clipName = Path.GetFileNameWithoutExtension(relativePath);
-                string[] guids  = AssetDatabase.FindAssets($"{clipName} t:AudioClip", new[] { "Assets/EcclesiaFighters/Audio" });
-                for (int i = 0; i < guids.Length; i++)
+                for (int c = 0; c < relativeCandidates.Length; c++)
                 {
-                    string candidatePath = AssetDatabase.GUIDToAssetPath(guids[i]);
-                    if (string.Equals(Path.GetFileNameWithoutExtension(candidatePath), clipName, System.StringComparison.OrdinalIgnoreCase))
+                    string fullPath = AudioRoot + relativeCandidates[c];
+                    clip = AssetDatabase.LoadAssetAtPath<AudioClip>(fullPath);
+                    if (clip != null) break;
+                }
+
+                if (clip == null)
+                {
+                    for (int c = 0; c < relativeCandidates.Length; c++)
                     {
-                        clip = AssetDatabase.LoadAssetAtPath<AudioClip>(candidatePath);
-                        break;
+                        string clipName = Path.GetFileNameWithoutExtension(relativeCandidates[c]);
+                        string[] guids  = AssetDatabase.FindAssets($"{clipName} t:AudioClip", new[] { "Assets/EcclesiaFighters/Audio" });
+                        for (int i = 0; i < guids.Length; i++)
+                        {
+                            string candidatePath = AssetDatabase.GUIDToAssetPath(guids[i]);
+                            if (string.Equals(Path.GetFileNameWithoutExtension(candidatePath), clipName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                clip = AssetDatabase.LoadAssetAtPath<AudioClip>(candidatePath);
+                                if (clip != null) break;
+                            }
+                        }
+                        if (clip != null) break;
                     }
                 }
             }
 
-            if (clip)
+            if (clip != null)
             {
                 cue.clip = clip;
                 if (forceScale || cue.volumeScale <= 0.001f)
@@ -122,7 +195,7 @@ namespace EcclesiaFighters.EditorTools
             }
             else
             {
-                Debug.LogWarning($"[AudioSetupTool] AudioClip not found at '{fullPath}'.");
+                Debug.LogWarning($"[AudioSetupTool] AudioClip not found at '{firstPath}'.");
                 missing++;
             }
         }
